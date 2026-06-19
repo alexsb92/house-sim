@@ -822,8 +822,14 @@ function makeLine(label, data, color, dashed) {
 
 function updateChart() {
   if (!chart || !simResult) return;
-  const ds = [];
 
+  const hiddenLabels = new Set(
+    (chart.data.datasets || [])
+      .filter((_, i) => !chart.isDatasetVisible(i))
+      .map(ds => ds.label)
+  );
+
+  const ds = [];
   if (simResult.inp.houseEnabled) {
     ds.push(makeLine('Current (With House)', simResult.withHouse, '#3b82f6', false));
     if (simResult.noHouse)
@@ -841,6 +847,9 @@ function updateChart() {
 
   chart.data.labels   = simResult.labels;
   chart.data.datasets = ds;
+  ds.forEach((dataset, i) => {
+    if (hiddenLabels.has(dataset.label)) chart.getDatasetMeta(i).hidden = true;
+  });
   chart.update();
 }
 
