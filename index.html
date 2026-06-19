@@ -147,14 +147,22 @@ body{
 .di-val.pos{color:#10b981}
 .di-val.neg{color:#ef4444}
 
+/* Simulation period bar (in chart header) */
+.period-bar{display:flex;align-items:center;gap:5px}
+.period-bar label{font-size:11px;color:#64748b;white-space:nowrap}
+.period-bar input[type=date]{padding:3px 6px;border:1px solid #cbd5e1;border-radius:5px;font-size:11px;color:#1e293b;background:#fff}
+.period-bar input[type=number]{padding:3px 4px;border:1px solid #cbd5e1;border-radius:5px;font-size:11px;color:#1e293b;background:#fff;width:44px}
+.period-bar input:focus{outline:none;border-color:#3b82f6}
+
 /* Scenarios panel */
 .sc-card{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:12px 16px}
 .sc-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
 .sc-list{display:flex;flex-direction:column;gap:2px}
-.sc-item{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:6px}
+.sc-item{display:flex;align-items:center;gap:6px;padding:5px 6px;border-radius:6px}
 .sc-item:hover{background:#f8fafc}
 .sc-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
-.sc-name{flex:1;font-size:12px;color:#1e293b}
+.sc-name{flex:1;font-size:12px;color:#1e293b;cursor:pointer}
+.sc-name:hover{color:#3b82f6;text-decoration:underline}
 .sc-badge{
   font-size:10px;padding:2px 7px;border-radius:10px;
   background:#f1f5f9;color:#64748b;cursor:pointer;border:1px solid #e2e8f0;
@@ -181,23 +189,6 @@ body{
   <!-- ══ SIDEBAR ══════════════════════════════════════════ -->
   <div class="sidebar">
     <div class="sidebar-scroll">
-
-      <!-- Simulation Period -->
-      <div class="section">
-        <div class="sec-hdr" onclick="toggleSec(this)">
-          <span>Simulation Period</span><span class="chevron">▼</span>
-        </div>
-        <div class="sec-body">
-          <div class="field">
-            <label>Start Date</label>
-            <input type="date" id="startDate">
-          </div>
-          <div class="field">
-            <label>Years to Simulate</label>
-            <input type="number" id="numYears" value="30" min="1" max="50">
-          </div>
-        </div>
-      </div>
 
       <!-- Assets -->
       <div class="section">
@@ -340,10 +331,19 @@ body{
 
     <div class="chart-card">
       <div class="chart-hdr">
-        <span class="chart-hdr-title" id="chartViewLabel">Net Worth</span>
-        <div class="view-toggle">
-          <button class="vtb active" id="btnNetWorth" onclick="setView('netWorth')">Net Worth</button>
-          <button class="vtb"        id="btnLiquid"   onclick="setView('liquid')">Liquid Assets</button>
+        <div class="period-bar">
+          <label>From</label>
+          <input type="date" id="startDate">
+          <label>for</label>
+          <input type="number" id="numYears" value="30" min="1" max="50">
+          <label>yrs</label>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <div class="view-toggle">
+            <button class="vtb active" id="btnNetWorth" onclick="setView('netWorth')">Net Worth</button>
+            <button class="vtb"        id="btnLiquid"   onclick="setView('liquid')">Liquid Assets</button>
+          </div>
+          <button class="vtb" onclick="chart && chart.resetZoom()" style="border:1px solid #e2e8f0;border-radius:6px">Reset Zoom</button>
         </div>
       </div>
       <canvas id="netWorthChart"></canvas>
@@ -377,6 +377,8 @@ body{
 </div><!-- /app-body -->
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
 <script>
 'use strict';
 
@@ -728,7 +730,11 @@ function initChart() {
         interaction: { mode: 'index', intersect: false },
         plugins: {
           legend: { position: 'top', labels: { boxWidth: 10, font: { size: 11 }, padding: 14 } },
-          tooltip: { callbacks: { label: c => `${c.dataset.label}: ${fmt$(c.parsed.y)}` } }
+          tooltip: { callbacks: { label: c => `${c.dataset.label}: ${fmt$(c.parsed.y)}` } },
+          zoom: {
+            zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' },
+            pan:  { enabled: true, mode: 'x' }
+          }
         },
         scales: {
           x: { ticks: { maxTicksLimit: 10, font: { size: 10 } }, grid: { color: '#f1f5f9' } },
@@ -883,6 +889,53 @@ function toggleScenario(id) {
   saveToStorage(); renderScenarios(); updateChart(); updateDelta();
 }
 
+function duplicateScenario(id) {
+  const sc = scenarios.find(s => s.id === id);
+  if (!sc) return;
+  const used  = new Set(scenarios.map(s => s.color));
+  const color = COLORS.find(c => !used.has(c)) || COLORS[scenarios.length % COLORS.length];
+  scenarios.push({ ...sc, id: Date.now(), name: sc.name + ' (copy)', color });
+  saveToStorage(); renderScenarios(); updateChart(); updateDelta();
+}
+
+function renameScenario(id) {
+  const sc = scenarios.find(s => s.id === id);
+  if (!sc) return;
+  const name = prompt('New name:', sc.name);
+  if (name && name.trim()) {
+    sc.name = name.trim();
+    saveToStorage(); renderScenarios(); updateChart();
+  }
+}
+
+function loadScenario(sc) {
+  const i = sc.inputs;
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val ?? ''; };
+  set('startDate',         i.startDate);
+  set('numYears',          i.numYears);
+  set('assetsAmount',      i.assetsAmount);
+  set('assetsGrowth',      i.assetsGrowth);
+  set('incomeSalary',      i.incomeSalary);
+  set('incomeRaise',       i.incomeRaise);
+  set('housePurchaseDate', i.housePurchaseDate);
+  set('homePrice',         i.homePrice);
+  set('downPayment',       i.downPayment);
+  set('loanTerm',          i.loanTerm);
+  set('interestRate',      i.interestRate);
+  set('propertyTax',       i.propertyTax);
+  set('taxIncrease',       i.taxIncrease);
+  set('insurance',         i.insurance);
+  set('homeAppreciation',  i.homeAppreciation);
+  document.getElementById('houseEnabled').checked    = !!i.houseEnabled;
+  document.getElementById('noHouseBaseline').checked = !!i.noHouseBaseline;
+  toggleHouseFields();
+  document.getElementById('grantsBody').innerHTML = '';
+  (i.grants  || []).forEach(g => addGrantRow(g));
+  document.getElementById('spendingBody').innerHTML = '';
+  (i.spending || []).forEach(s => addSpendingRow(s));
+  runSimulation();
+}
+
 function clearAll() {
   if (!confirm('Delete all saved scenarios?')) return;
   scenarios = [];
@@ -901,10 +954,11 @@ function renderScenarios() {
     div.className = 'sc-item';
     div.innerHTML = `
       <div class="sc-dot" style="background:${sc.color}"></div>
-      <div class="sc-name">${sc.name}</div>
-      <button class="sc-badge ${sc.visible ? '' : 'dim'}"
-              onclick="toggleScenario(${sc.id})">${sc.visible ? 'Hide' : 'Show'}</button>
-      <button class="sc-del" onclick="deleteScenario(${sc.id})">Delete</button>
+      <div class="sc-name" onclick="loadScenario(scenarios.find(s=>s.id===${sc.id}))" title="Click to load into editor">${sc.name}</div>
+      <button class="sc-badge ${sc.visible ? '' : 'dim'}" onclick="toggleScenario(${sc.id})">${sc.visible ? 'Hide' : 'Show'}</button>
+      <button class="sc-badge" onclick="duplicateScenario(${sc.id})">Dup</button>
+      <button class="sc-badge" onclick="renameScenario(${sc.id})">Rename</button>
+      <button class="sc-del"   onclick="deleteScenario(${sc.id})">Del</button>
     `;
     el.appendChild(div);
   }
