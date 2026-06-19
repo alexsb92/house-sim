@@ -199,6 +199,11 @@ body{
 .data-table td:first-child{color:#64748b;font-size:10px}
 .data-table td.flow-out{color:#dc2626}
 .data-table td.flow-in{color:#16a34a}
+.data-table .grp{cursor:pointer;user-select:none}
+.data-table .grp:hover{opacity:.8}
+.data-table .grp-collapsed{width:14px;padding:4px 3px;font-size:9px}
+.data-table .col-collapsed{width:14px;padding:0}
+.data-table .td-collapsed{width:14px;padding:0}
 </style>
 </head>
 <body>
@@ -437,8 +442,9 @@ let scenarios        = [];
 let simResult        = null;
 let chart            = null;
 let viewMode         = 'netWorth'; // 'netWorth' | 'liquid'
-let mainView         = 'chart';    // 'chart' | 'table'
-let tableGranularity = 'monthly';  // 'monthly' | 'yearly'
+let mainView           = 'chart';    // 'chart' | 'table'
+let tableGranularity   = 'monthly';  // 'monthly' | 'yearly'
+let hiddenTableSources = new Set();  // source names collapsed in table
 
 // ── Init ──────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -1044,6 +1050,11 @@ function setTableGranularity(g) {
   buildTable();
 }
 
+function toggleTableSource(name) {
+  hiddenTableSources.has(name) ? hiddenTableSources.delete(name) : hiddenTableSources.add(name);
+  buildTable();
+}
+
 function buildTable() {
   const tbl = document.getElementById('dataTable');
   if (!simResult) {
@@ -1069,20 +1080,31 @@ function buildTable() {
       sources.push({ name: `${sc.name} (No House)`, data: sc.noHouseData, color: sc.color });
   }
 
-  // Header row 1: Date + one group header per source (colspan=6)
+  // Header row 1: Date + one group header per source
   let h1 = '<tr><th rowspan="2" style="text-align:left;vertical-align:bottom;border-right:1px solid #e2e8f0">Date</th>';
   for (const src of sources) {
-    h1 += `<th class="grp" colspan="6" style="border-left:3px solid ${src.color};color:${src.color}">${src.name}</th>`;
+    const collapsed = hiddenTableSources.has(src.name);
+    const n = JSON.stringify(src.name);
+    if (collapsed) {
+      h1 += `<th class="grp grp-collapsed" colspan="1" onclick="toggleTableSource(${n})" style="border-left:3px solid ${src.color};color:${src.color}" title="${src.name}">▶</th>`;
+    } else {
+      h1 += `<th class="grp" colspan="6" onclick="toggleTableSource(${n})" style="border-left:3px solid ${src.color};color:${src.color}">▼ ${src.name}</th>`;
+    }
   }
   h1 += '</tr>';
 
-  // Header row 2: column names per source
+  // Header row 2: column names per source (skipped when collapsed)
   const cols = ['Income', 'RSU', 'Spending', 'House', 'Liquid', 'Net Worth'];
   let h2 = '<tr>';
   for (let si = 0; si < sources.length; si++) {
-    for (let ci = 0; ci < cols.length; ci++) {
-      const border = ci === 0 ? `border-left:3px solid ${sources[si].color}` : '';
-      h2 += `<th class="col" style="${border}">${cols[ci]}</th>`;
+    const src = sources[si];
+    if (hiddenTableSources.has(src.name)) {
+      h2 += `<th class="col-collapsed"></th>`;
+    } else {
+      for (let ci = 0; ci < cols.length; ci++) {
+        const border = ci === 0 ? `border-left:3px solid ${src.color}` : '';
+        h2 += `<th class="col" style="${border}">${cols[ci]}</th>`;
+      }
     }
   }
   h2 += '</tr>';
@@ -1098,17 +1120,24 @@ function buildTable() {
       const label = sources[0].data[i] ? labelFromKey(sources[0].data[i].date) : '';
       rows += `<tr><td>${label}</td>`;
       for (const src of sources) {
-        rows += buildDataCells(src.data[i], src.color, false);
+        if (hiddenTableSources.has(src.name)) {
+          rows += `<td class="td-collapsed" style="border-left:3px solid ${src.color}"></td>`;
+        } else {
+          rows += buildDataCells(src.data[i], src.color);
+        }
       }
       rows += '</tr>';
     }
   } else {
-    // Yearly: group months by year, sum flows, take last-month balances
     const yearGroups = buildYearGroups(sources);
     for (const yr of yearGroups) {
       rows += `<tr><td>${yr.label}</td>`;
       for (const src of sources) {
-        rows += buildDataCells(yr.bySource.get(src) || null, src.color, true);
+        if (hiddenTableSources.has(src.name)) {
+          rows += `<td class="td-collapsed" style="border-left:3px solid ${src.color}"></td>`;
+        } else {
+          rows += buildDataCells(yr.bySource.get(src) || null, src.color);
+        }
       }
       rows += '</tr>';
     }
