@@ -927,7 +927,8 @@ function clearActiveScenario() {
 }
 
 function saveScenario() {
-  if (!simResult) { runSimulation(); return; }
+  runSimulation();
+  if (!simResult) return;
 
   if (activeScenarioId !== null) {
     const existing = scenarios.find(s => s.id === activeScenarioId);
