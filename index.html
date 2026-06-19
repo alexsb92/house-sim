@@ -119,7 +119,14 @@ body{
 .chart-card{
   flex:1;background:#fff;border:1px solid #e2e8f0;
   border-radius:10px;padding:16px;min-height:0;position:relative;
+  display:flex;flex-direction:column;
 }
+.chart-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-shrink:0}
+.chart-hdr-title{font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.05em}
+.view-toggle{display:flex;border:1px solid #e2e8f0;border-radius:6px;overflow:hidden}
+.vtb{padding:4px 10px;font-size:11px;font-weight:600;border:none;background:#f8fafc;color:#64748b;cursor:pointer}
+.vtb:hover{background:#f1f5f9}
+.vtb.active{background:#3b82f6;color:#fff}
 
 /* Delta panel */
 .delta-card{
@@ -332,6 +339,13 @@ body{
   <div class="main">
 
     <div class="chart-card">
+      <div class="chart-hdr">
+        <span class="chart-hdr-title" id="chartViewLabel">Net Worth</span>
+        <div class="view-toggle">
+          <button class="vtb active" id="btnNetWorth" onclick="setView('netWorth')">Net Worth</button>
+          <button class="vtb"        id="btnLiquid"   onclick="setView('liquid')">Liquid Assets</button>
+        </div>
+      </div>
       <canvas id="netWorthChart"></canvas>
     </div>
 
@@ -376,6 +390,7 @@ const COLORS = [
 let scenarios = [];
 let simResult  = null;
 let chart      = null;
+let viewMode   = 'netWorth'; // 'netWorth' | 'liquid'
 
 // ── Init ──────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -724,10 +739,20 @@ function initChart() {
   );
 }
 
+function setView(mode) {
+  viewMode = mode;
+  document.getElementById('btnNetWorth').classList.toggle('active', mode === 'netWorth');
+  document.getElementById('btnLiquid').classList.toggle('active', mode === 'liquid');
+  document.getElementById('chartViewLabel').textContent =
+    mode === 'netWorth' ? 'Net Worth' : 'Liquid Assets';
+  updateChart();
+  updateDelta();
+}
+
 function makeLine(label, data, color, dashed) {
   return {
     label,
-    data:          data.map(d => d.netWorth),
+    data:          data.map(d => d[viewMode] ?? d.netWorth),
     borderColor:   color,
     backgroundColor: 'transparent',
     borderWidth:   2,
@@ -810,7 +835,8 @@ function updateDelta() {
   container.innerHTML = '';
   for (const ln of lines) {
     if (ln.data.length <= e) continue;
-    const delta = ln.data[e].netWorth - ln.data[s].netWorth;
+    const delta = (ln.data[e][viewMode] ?? ln.data[e].netWorth)
+                - (ln.data[s][viewMode] ?? ln.data[s].netWorth);
     const div = document.createElement('div');
     div.className = 'delta-item';
     div.innerHTML = `
