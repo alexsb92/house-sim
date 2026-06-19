@@ -175,6 +175,30 @@ body{
 }
 .sc-del:hover{background:#fef2f2}
 .empty-hint{font-size:11px;color:#94a3b8}
+
+/* ── Main topbar ─────────────────────────────────────────── */
+.main-topbar{display:flex;align-items:center;justify-content:space-between;flex-shrink:0;background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:8px 14px}
+.main-tabs{display:flex;border:1px solid #e2e8f0;border-radius:6px;overflow:hidden}
+.mtab{padding:5px 14px;font-size:12px;font-weight:600;border:none;background:#f8fafc;color:#64748b;cursor:pointer}
+.mtab:hover{background:#f1f5f9}
+.mtab.active{background:#3b82f6;color:#fff}
+
+/* ── Table card ──────────────────────────────────────────── */
+.table-card{flex:1;background:#fff;border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;display:flex;flex-direction:column;min-height:0}
+.table-hdr{padding:10px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #e2e8f0;flex-shrink:0}
+.table-scroll{flex:1;overflow:auto}
+.data-table{width:100%;border-collapse:collapse;font-size:11px;white-space:nowrap}
+.data-table th{position:sticky;top:0;z-index:1;background:#f8fafc;padding:6px 10px;text-align:right;border-bottom:1px solid #e2e8f0}
+.data-table th.grp{text-align:center;border-left:2px solid #e2e8f0;font-size:11px;padding:5px 10px}
+.data-table th.col{font-size:10px;font-weight:600;color:#64748b}
+.data-table th:first-child,.data-table td:first-child{position:sticky;left:0;background:#fff;z-index:1;text-align:left}
+.data-table th:first-child{z-index:2;background:#f8fafc}
+.data-table td{padding:4px 10px;text-align:right;border-bottom:1px solid #f1f5f9}
+.data-table tr:hover td{background:#f8fafc}
+.data-table tr:hover td:first-child{background:#f1f5f9}
+.data-table td:first-child{color:#64748b;font-size:10px}
+.data-table td.flow-out{color:#dc2626}
+.data-table td.flow-in{color:#16a34a}
 </style>
 </head>
 <body>
@@ -329,15 +353,22 @@ body{
   <!-- ══ MAIN ═════════════════════════════════════════════ -->
   <div class="main">
 
-    <div class="chart-card">
+    <div class="main-topbar">
+      <div class="period-bar">
+        <label>From</label>
+        <input type="date" id="startDate">
+        <label>for</label>
+        <input type="number" id="numYears" value="30" min="1" max="50">
+        <label>yrs</label>
+      </div>
+      <div class="main-tabs">
+        <button class="mtab active" id="tabChart" onclick="setMainView('chart')">Chart</button>
+        <button class="mtab"        id="tabTable" onclick="setMainView('table')">Table</button>
+      </div>
+    </div>
+
+    <div class="chart-card" id="chartCard">
       <div class="chart-hdr">
-        <div class="period-bar">
-          <label>From</label>
-          <input type="date" id="startDate">
-          <label>for</label>
-          <input type="number" id="numYears" value="30" min="1" max="50">
-          <label>yrs</label>
-        </div>
         <div style="display:flex;gap:6px;align-items:center">
           <div class="view-toggle">
             <button class="vtb active" id="btnNetWorth" onclick="setView('netWorth')">Net Worth</button>
@@ -349,7 +380,20 @@ body{
       <canvas id="netWorthChart"></canvas>
     </div>
 
-    <div class="delta-card">
+    <div class="table-card" id="tableCard" style="display:none">
+      <div class="table-hdr">
+        <span class="panel-title">Monthly Breakdown</span>
+        <div class="view-toggle">
+          <button class="vtb active" id="btnMonthly" onclick="setTableGranularity('monthly')">Monthly</button>
+          <button class="vtb"        id="btnYearly"  onclick="setTableGranularity('yearly')">Yearly</button>
+        </div>
+      </div>
+      <div class="table-scroll">
+        <table class="data-table" id="dataTable"><thead></thead><tbody></tbody></table>
+      </div>
+    </div>
+
+    <div class="delta-card" id="deltaCard">
       <div class="panel-title">Net Worth Change in Selected Period</div>
       <div class="range-row">
         <span class="range-lbl">From</span>
@@ -389,10 +433,12 @@ const COLORS = [
 ];
 
 // ── State ─────────────────────────────────────────────────
-let scenarios = [];
-let simResult  = null;
-let chart      = null;
-let viewMode   = 'netWorth'; // 'netWorth' | 'liquid'
+let scenarios        = [];
+let simResult        = null;
+let chart            = null;
+let viewMode         = 'netWorth'; // 'netWorth' | 'liquid'
+let mainView         = 'chart';    // 'chart' | 'table'
+let tableGranularity = 'monthly';  // 'monthly' | 'yearly'
 
 // ── Init ──────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -688,7 +734,11 @@ function simulateMonths(inp, includeHouse) {
       liquid,
       equity,
       homeVal:    housePurchased ? homeVal    : 0,
-      mortgageBal: housePurchased ? mortgageBal : 0
+      mortgageBal: housePurchased ? mortgageBal : 0,
+      income,
+      vests,
+      spending,
+      houseCost
     });
   }
   return results;
@@ -714,6 +764,7 @@ function runSimulation() {
 
   updateChart();
   updateDelta();
+  if (mainView === 'table') buildTable();
 }
 
 // ── Chart ─────────────────────────────────────────────────
@@ -946,6 +997,7 @@ function renderScenarios() {
   const el = document.getElementById('scenariosList');
   if (!scenarios.length) {
     el.innerHTML = '<span class="empty-hint">No scenarios saved yet — configure inputs and click "Save Scenario".</span>';
+    if (mainView === 'table') buildTable();
     return;
   }
   el.innerHTML = '';
@@ -962,6 +1014,139 @@ function renderScenarios() {
     `;
     el.appendChild(div);
   }
+  if (mainView === 'table') buildTable();
+}
+
+// ── Table view ────────────────────────────────────────────
+function setMainView(mode) {
+  mainView = mode;
+  document.getElementById('tabChart').classList.toggle('active', mode === 'chart');
+  document.getElementById('tabTable').classList.toggle('active', mode === 'table');
+  document.getElementById('chartCard').style.display = mode === 'chart' ? '' : 'none';
+  document.getElementById('deltaCard').style.display = mode === 'chart' ? '' : 'none';
+  document.getElementById('tableCard').style.display = mode === 'table' ? '' : 'none';
+  if (mode === 'table') buildTable();
+}
+
+function setTableGranularity(g) {
+  tableGranularity = g;
+  document.getElementById('btnMonthly').classList.toggle('active', g === 'monthly');
+  document.getElementById('btnYearly').classList.toggle('active',  g === 'yearly');
+  buildTable();
+}
+
+function buildTable() {
+  const tbl = document.getElementById('dataTable');
+  if (!simResult) {
+    tbl.tHead.innerHTML = '';
+    tbl.tBodies[0].innerHTML = '';
+    return;
+  }
+
+  // Gather sources: current sim + visible saved scenarios
+  const sources = [];
+  const inp = simResult.inp;
+  sources.push({
+    name:  inp.houseEnabled ? 'Current (With House)' : 'Current',
+    data:  simResult.withHouse,
+    color: '#3b82f6'
+  });
+  if (simResult.noHouse)
+    sources.push({ name: 'Current (No House)', data: simResult.noHouse, color: '#3b82f6' });
+  for (const sc of scenarios) {
+    if (!sc.visible) continue;
+    sources.push({ name: sc.name, data: sc.data, color: sc.color });
+    if (sc.noHouseData)
+      sources.push({ name: `${sc.name} (No House)`, data: sc.noHouseData, color: sc.color });
+  }
+
+  // Header row 1: Date + one group header per source (colspan=6)
+  let h1 = '<tr><th rowspan="2" style="text-align:left;vertical-align:bottom;border-right:1px solid #e2e8f0">Date</th>';
+  for (const src of sources) {
+    h1 += `<th class="grp" colspan="6" style="border-left:3px solid ${src.color};color:${src.color}">${src.name}</th>`;
+  }
+  h1 += '</tr>';
+
+  // Header row 2: column names per source
+  const cols = ['Income', 'RSU', 'Spending', 'House', 'Liquid', 'Net Worth'];
+  let h2 = '<tr>';
+  for (let si = 0; si < sources.length; si++) {
+    for (let ci = 0; ci < cols.length; ci++) {
+      const border = ci === 0 ? `border-left:3px solid ${sources[si].color}` : '';
+      h2 += `<th class="col" style="${border}">${cols[ci]}</th>`;
+    }
+  }
+  h2 += '</tr>';
+  tbl.tHead.innerHTML = h1 + h2;
+
+  // Build rows
+  const monthly = tableGranularity === 'monthly';
+  let rows = '';
+
+  if (monthly) {
+    const len = Math.max(...sources.map(s => s.data.length));
+    for (let i = 0; i < len; i++) {
+      const label = sources[0].data[i] ? labelFromKey(sources[0].data[i].date) : '';
+      rows += `<tr><td>${label}</td>`;
+      for (const src of sources) {
+        rows += buildDataCells(src.data[i], src.color, false);
+      }
+      rows += '</tr>';
+    }
+  } else {
+    // Yearly: group months by year, sum flows, take last-month balances
+    const yearGroups = buildYearGroups(sources);
+    for (const yr of yearGroups) {
+      rows += `<tr><td>${yr.label}</td>`;
+      for (const src of sources) {
+        rows += buildDataCells(yr.bySource.get(src) || null, src.color, true);
+      }
+      rows += '</tr>';
+    }
+  }
+
+  tbl.tBodies[0].innerHTML = rows;
+}
+
+function buildDataCells(d, color) {
+  if (!d) return `<td style="border-left:3px solid ${color}" colspan="6">—</td>`;
+  const firstBorder = `style="border-left:3px solid ${color}"`;
+  return (
+    `<td class="flow-in"  ${firstBorder} title="${fmt$(d.income)}">${fmtShort(d.income)}</td>` +
+    `<td class="flow-in"  title="${fmt$(d.vests)}">${fmtShort(d.vests)}</td>` +
+    `<td class="flow-out" title="${fmt$(-d.spending)}">${d.spending > 0 ? '-' : ''}${fmtShort(d.spending)}</td>` +
+    `<td class="flow-out" title="${fmt$(-d.houseCost)}">${d.houseCost > 0 ? '-' : ''}${fmtShort(d.houseCost)}</td>` +
+    `<td title="${fmt$(d.liquid)}">${fmtShort(d.liquid)}</td>` +
+    `<td title="${fmt$(d.netWorth)}">${fmtShort(d.netWorth)}</td>`
+  );
+}
+
+function buildYearGroups(sources) {
+  // Find all years across all sources
+  const years = new Set();
+  for (const src of sources) {
+    for (const d of src.data) years.add(d.date.substring(0, 4));
+  }
+  const sortedYears = Array.from(years).sort();
+
+  return sortedYears.map(yr => {
+    const bySource = new Map();
+    for (const src of sources) {
+      const months = src.data.filter(d => d.date.startsWith(yr));
+      if (!months.length) continue;
+      // Sum flows, use last month's balances
+      const last = months[months.length - 1];
+      bySource.set(src, {
+        income:   months.reduce((a, m) => a + m.income,   0),
+        vests:    months.reduce((a, m) => a + m.vests,    0),
+        spending: months.reduce((a, m) => a + m.spending, 0),
+        houseCost:months.reduce((a, m) => a + m.houseCost,0),
+        liquid:   last.liquid,
+        netWorth: last.netWorth
+      });
+    }
+    return { label: yr, bySource };
+  });
 }
 
 // ── LocalStorage ──────────────────────────────────────────
