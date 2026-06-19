@@ -1,0 +1,881 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>House Scenario Planner</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{
+  font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  background:#f0f2f5;color:#1a1a2e;font-size:13px;
+}
+
+/* ── Header ─────────────────────────────────────────── */
+.app-header{
+  height:48px;background:#1a1a2e;color:#fff;
+  display:flex;align-items:center;padding:0 20px;gap:12px;flex-shrink:0;
+}
+.app-header h1{font-size:16px;font-weight:700}
+.app-header span{font-size:11px;opacity:.5}
+
+/* ── App body ────────────────────────────────────────── */
+.app-body{display:flex;height:calc(100vh - 48px)}
+
+/* ── Sidebar ─────────────────────────────────────────── */
+.sidebar{
+  width:380px;flex-shrink:0;background:#fff;
+  border-right:1px solid #e2e8f0;
+  display:flex;flex-direction:column;
+}
+.sidebar-scroll{flex:1;overflow-y:auto}
+
+/* Collapsible sections */
+.section{border-bottom:1px solid #e2e8f0}
+.sec-hdr{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:10px 16px;background:#f8fafc;cursor:pointer;user-select:none;
+  font-weight:700;font-size:11px;color:#475569;
+  text-transform:uppercase;letter-spacing:.05em;
+}
+.sec-hdr:hover{background:#f1f5f9}
+.chevron{font-size:9px;transition:transform .15s}
+.sec-hdr.collapsed .chevron{transform:rotate(-90deg)}
+.sec-body{padding:12px 16px;display:flex;flex-direction:column;gap:8px}
+.sec-body.hidden{display:none}
+
+/* Form fields */
+.field{display:flex;align-items:center;gap:8px}
+.field label{flex:0 0 172px;font-size:12px;color:#64748b}
+.field input[type=text],
+.field input[type=number],
+.field input[type=date]{
+  flex:1;padding:5px 8px;border:1px solid #cbd5e1;border-radius:5px;
+  font-size:12px;background:#fff;color:#1e293b;
+}
+.field input:focus{outline:none;border-color:#3b82f6;box-shadow:0 0 0 2px rgba(59,130,246,.15)}
+
+/* Toggle */
+.toggle{position:relative;display:inline-block;width:38px;height:21px}
+.toggle input{opacity:0;width:0;height:0}
+.tslider{
+  position:absolute;cursor:pointer;inset:0;
+  background:#cbd5e1;border-radius:21px;transition:background .2s;
+}
+.tslider::before{
+  content:'';position:absolute;width:15px;height:15px;
+  left:3px;top:3px;background:#fff;border-radius:50%;
+  transition:transform .2s;box-shadow:0 1px 3px rgba(0,0,0,.2);
+}
+.toggle input:checked+.tslider{background:#3b82f6}
+.toggle input:checked+.tslider::before{transform:translateX(17px)}
+
+/* Dynamic tables */
+.dyn-table{width:100%;border-collapse:collapse;font-size:11px}
+.dyn-table th{
+  text-align:left;padding:5px 6px;background:#f8fafc;
+  color:#64748b;font-weight:600;border-bottom:1px solid #e2e8f0;
+}
+.dyn-table td{padding:3px 4px;vertical-align:middle;border-bottom:1px solid #f1f5f9}
+.dyn-table td:last-child{width:22px}
+.dyn-table input{
+  width:100%;padding:4px 5px;border:1px solid #e2e8f0;
+  border-radius:4px;font-size:11px;background:#fff;color:#1e293b;
+}
+.dyn-table input:focus{outline:none;border-color:#3b82f6}
+.del-btn{
+  background:none;border:none;cursor:pointer;color:#94a3b8;
+  font-size:16px;line-height:1;padding:2px 3px;border-radius:3px;
+  display:flex;align-items:center;justify-content:center;
+}
+.del-btn:hover{color:#ef4444;background:#fee2e2}
+.add-btn{
+  width:100%;padding:6px;border:1px dashed #cbd5e1;border-radius:5px;
+  background:none;cursor:pointer;font-size:11px;color:#64748b;margin-top:4px;
+}
+.add-btn:hover{border-color:#3b82f6;color:#3b82f6;background:#eff6ff}
+.hint{font-size:10px;color:#94a3b8;line-height:1.4}
+
+/* Actions bar */
+.actions{
+  padding:12px 16px;display:flex;gap:8px;flex-wrap:wrap;
+  background:#fff;border-top:1px solid #e2e8f0;flex-shrink:0;
+}
+.btn{
+  padding:7px 14px;border:none;border-radius:6px;
+  cursor:pointer;font-size:12px;font-weight:600;transition:all .15s;
+}
+.btn-primary{background:#3b82f6;color:#fff}
+.btn-primary:hover{background:#2563eb}
+.btn-success{background:#10b981;color:#fff}
+.btn-success:hover{background:#059669}
+.btn-ghost{background:#f1f5f9;color:#475569;border:1px solid #e2e8f0}
+.btn-ghost:hover{background:#e2e8f0;color:#1e293b}
+
+/* ── Main area ───────────────────────────────────────── */
+.main{flex:1;display:flex;flex-direction:column;min-width:0;padding:14px;gap:10px;overflow:hidden}
+
+.chart-card{
+  flex:1;background:#fff;border:1px solid #e2e8f0;
+  border-radius:10px;padding:16px;min-height:0;position:relative;
+}
+
+/* Delta panel */
+.delta-card{
+  background:#fff;border:1px solid #e2e8f0;border-radius:10px;
+  padding:12px 16px;display:flex;flex-direction:column;gap:8px;
+}
+.panel-title{
+  font-size:10px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.06em;color:#64748b;
+}
+.range-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.range-lbl{font-size:11px;color:#64748b;white-space:nowrap}
+.range-row input[type=range]{flex:1;min-width:80px;accent-color:#3b82f6;cursor:pointer}
+.range-date{font-size:11px;font-weight:600;color:#1e293b;min-width:72px;text-align:center}
+.delta-values{display:flex;gap:20px;flex-wrap:wrap;min-height:20px}
+.di-label{font-size:10px;color:#94a3b8}
+.di-val{font-size:13px;font-weight:700}
+.di-val.pos{color:#10b981}
+.di-val.neg{color:#ef4444}
+
+/* Scenarios panel */
+.sc-card{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:12px 16px}
+.sc-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.sc-list{display:flex;flex-direction:column;gap:2px}
+.sc-item{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:6px}
+.sc-item:hover{background:#f8fafc}
+.sc-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.sc-name{flex:1;font-size:12px;color:#1e293b}
+.sc-badge{
+  font-size:10px;padding:2px 7px;border-radius:10px;
+  background:#f1f5f9;color:#64748b;cursor:pointer;border:1px solid #e2e8f0;
+}
+.sc-badge:hover{background:#e2e8f0}
+.sc-badge.dim{opacity:.45}
+.sc-del{
+  font-size:10px;padding:2px 7px;border-radius:10px;
+  background:#fff;color:#ef4444;cursor:pointer;border:1px solid #fecaca;
+}
+.sc-del:hover{background:#fef2f2}
+.empty-hint{font-size:11px;color:#94a3b8}
+</style>
+</head>
+<body>
+
+<div class="app-header">
+  <h1>House Scenario Planner</h1>
+  <span>Compare net worth across financial scenarios</span>
+</div>
+
+<div class="app-body">
+
+  <!-- ══ SIDEBAR ══════════════════════════════════════════ -->
+  <div class="sidebar">
+    <div class="sidebar-scroll">
+
+      <!-- Simulation Period -->
+      <div class="section">
+        <div class="sec-hdr" onclick="toggleSec(this)">
+          <span>Simulation Period</span><span class="chevron">▼</span>
+        </div>
+        <div class="sec-body">
+          <div class="field">
+            <label>Start Date</label>
+            <input type="date" id="startDate">
+          </div>
+          <div class="field">
+            <label>Years to Simulate</label>
+            <input type="number" id="numYears" value="30" min="1" max="50">
+          </div>
+        </div>
+      </div>
+
+      <!-- Assets -->
+      <div class="section">
+        <div class="sec-hdr" onclick="toggleSec(this)">
+          <span>Assets</span><span class="chevron">▼</span>
+        </div>
+        <div class="sec-body">
+          <div class="field">
+            <label>Starting Amount ($)</label>
+            <input type="number" id="assetsAmount" value="200000">
+          </div>
+          <div class="field">
+            <label>Annual Growth Rate (%)</label>
+            <input type="number" id="assetsGrowth" value="7" step="0.1">
+          </div>
+        </div>
+      </div>
+
+      <!-- Income -->
+      <div class="section">
+        <div class="sec-hdr" onclick="toggleSec(this)">
+          <span>Income</span><span class="chevron">▼</span>
+        </div>
+        <div class="sec-body">
+          <div class="field">
+            <label>Annual Salary ($)</label>
+            <input type="number" id="incomeSalary" value="150000">
+          </div>
+          <div class="field">
+            <label>Annual Raise (%)</label>
+            <input type="number" id="incomeRaise" value="3" step="0.1">
+          </div>
+        </div>
+      </div>
+
+      <!-- Stock Grants -->
+      <div class="section">
+        <div class="sec-hdr" onclick="toggleSec(this)">
+          <span>Stock Grants (RSUs)</span><span class="chevron">▼</span>
+        </div>
+        <div class="sec-body">
+          <table class="dyn-table">
+            <thead><tr><th>Total Value ($)</th><th>Grant Date</th><th></th></tr></thead>
+            <tbody id="grantsBody"></tbody>
+          </table>
+          <button class="add-btn" onclick="addGrantRow()">+ Add Grant</button>
+          <p class="hint">Vests in 8 equal installments every April &amp; October over 4 years.</p>
+        </div>
+      </div>
+
+      <!-- House -->
+      <div class="section">
+        <div class="sec-hdr" onclick="toggleSec(this)">
+          <span>House Purchase</span><span class="chevron">▼</span>
+        </div>
+        <div class="sec-body">
+          <div class="field">
+            <label>Include House</label>
+            <label class="toggle">
+              <input type="checkbox" id="houseEnabled" checked onchange="toggleHouseFields()">
+              <span class="tslider"></span>
+            </label>
+          </div>
+          <div id="houseFields">
+            <div class="field">
+              <label>Purchase Date</label>
+              <input type="date" id="housePurchaseDate">
+            </div>
+            <div class="field">
+              <label>Home Price ($)</label>
+              <input type="number" id="homePrice" value="800000">
+            </div>
+            <div class="field">
+              <label>Down Payment ($)</label>
+              <input type="number" id="downPayment" value="160000">
+            </div>
+            <div class="field">
+              <label>Loan Term (years)</label>
+              <input type="number" id="loanTerm" value="30">
+            </div>
+            <div class="field">
+              <label>Interest Rate (%)</label>
+              <input type="number" id="interestRate" value="6.5" step="0.05">
+            </div>
+            <div class="field">
+              <label>Property Tax (%/yr of price)</label>
+              <input type="number" id="propertyTax" value="1.2" step="0.01">
+            </div>
+            <div class="field">
+              <label>Tax Increase (%/yr)</label>
+              <input type="number" id="taxIncrease" value="2" step="0.1">
+            </div>
+            <div class="field">
+              <label>Insurance ($/mo)</label>
+              <input type="number" id="insurance" value="200">
+            </div>
+            <div class="field">
+              <label>Home Appreciation (%/yr)</label>
+              <input type="number" id="homeAppreciation" value="3" step="0.1">
+            </div>
+            <div class="field" style="margin-top:4px">
+              <label>Show No-House Baseline</label>
+              <label class="toggle">
+                <input type="checkbox" id="noHouseBaseline" checked>
+                <span class="tslider"></span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Spending -->
+      <div class="section">
+        <div class="sec-hdr" onclick="toggleSec(this)">
+          <span>Monthly Spending</span><span class="chevron">▼</span>
+        </div>
+        <div class="sec-body" style="overflow-x:auto">
+          <table class="dyn-table" style="min-width:310px">
+            <thead>
+              <tr><th>Description</th><th>$/mo</th><th>Start</th><th>End</th><th></th></tr>
+            </thead>
+            <tbody id="spendingBody"></tbody>
+          </table>
+          <button class="add-btn" onclick="addSpendingRow()">+ Add Spending Item</button>
+          <p class="hint">Leave End blank for ongoing expenses.</p>
+        </div>
+      </div>
+
+    </div><!-- /sidebar-scroll -->
+
+    <div class="actions">
+      <button class="btn btn-primary" onclick="runSimulation()">Calculate</button>
+      <button class="btn btn-success" onclick="saveScenario()">Save Scenario</button>
+      <button class="btn btn-ghost"   onclick="clearAll()">Clear All</button>
+    </div>
+  </div><!-- /sidebar -->
+
+  <!-- ══ MAIN ═════════════════════════════════════════════ -->
+  <div class="main">
+
+    <div class="chart-card">
+      <canvas id="netWorthChart"></canvas>
+    </div>
+
+    <div class="delta-card">
+      <div class="panel-title">Net Worth Change in Selected Period</div>
+      <div class="range-row">
+        <span class="range-lbl">From</span>
+        <input type="range" id="rangeStart" min="0" max="359" value="0"   oninput="updateDelta()">
+        <span class="range-date" id="labelStart">—</span>
+        <span class="range-lbl">To</span>
+        <input type="range" id="rangeEnd"   min="0" max="359" value="359" oninput="updateDelta()">
+        <span class="range-date" id="labelEnd">—</span>
+      </div>
+      <div class="delta-values" id="deltaValues">
+        <span class="empty-hint">Run the simulation to see deltas.</span>
+      </div>
+    </div>
+
+    <div class="sc-card">
+      <div class="sc-head">
+        <span class="panel-title">Saved Scenarios</span>
+      </div>
+      <div class="sc-list" id="scenariosList">
+        <span class="empty-hint">No scenarios saved yet — configure inputs and click "Save Scenario".</span>
+      </div>
+    </div>
+
+  </div><!-- /main -->
+</div><!-- /app-body -->
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+'use strict';
+
+// ── Constants ─────────────────────────────────────────────
+const COLORS = [
+  '#ef4444','#10b981','#f59e0b','#8b5cf6',
+  '#06b6d4','#f97316','#ec4899','#6366f1','#14b8a6','#84cc16'
+];
+
+// ── State ─────────────────────────────────────────────────
+let scenarios = [];
+let simResult  = null;
+let chart      = null;
+
+// ── Init ──────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  const today = toDateInput(new Date());
+  document.getElementById('startDate').value        = today;
+  document.getElementById('housePurchaseDate').value = today;
+
+  loadFromStorage();
+  addGrantRow({ amount: 200000, date: today });
+  addSpendingRow({ desc: 'General Living', amount: 5000, start: '', end: '' });
+
+  initChart();
+  runSimulation();
+});
+
+// ── Date helpers ──────────────────────────────────────────
+function toDateInput(d) {
+  const y  = d.getFullYear();
+  const m  = String(d.getMonth() + 1).padStart(2, '0');
+  const dy = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${dy}`;
+}
+
+function parseLocalDate(str) {
+  if (!str) return null;
+  const parts = str.split('-').map(Number);
+  return new Date(parts[0], parts[1] - 1, parts[2] || 1);
+}
+
+function monthKey(year, month) {          // month 0-indexed
+  return `${year}-${String(month + 1).padStart(2, '0')}-01`;
+}
+
+function labelFromKey(key) {
+  const [y, m] = key.split('-').map(Number);
+  return new Date(y, m - 1, 1).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+}
+
+// ── UI helpers ────────────────────────────────────────────
+function toggleSec(hdr) {
+  hdr.classList.toggle('collapsed');
+  hdr.nextElementSibling.classList.toggle('hidden');
+}
+
+function toggleHouseFields() {
+  document.getElementById('houseFields').style.display =
+    document.getElementById('houseEnabled').checked ? '' : 'none';
+}
+
+// ── Dynamic rows: Grants ──────────────────────────────────
+function addGrantRow(data = {}) {
+  const today = toDateInput(new Date());
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td><input type="number" value="${data.amount ?? 200000}" placeholder="100000"></td>
+    <td><input type="date"   value="${data.date   ?? today}"></td>
+    <td><button class="del-btn" title="Remove" onclick="this.closest('tr').remove()">×</button></td>
+  `;
+  document.getElementById('grantsBody').appendChild(tr);
+}
+
+function getGrants() {
+  return Array.from(document.querySelectorAll('#grantsBody tr')).map(tr => {
+    const [a, d] = tr.querySelectorAll('input');
+    return { amount: parseFloat(a.value) || 0, date: d.value };
+  });
+}
+
+// ── Dynamic rows: Spending ────────────────────────────────
+function addSpendingRow(data = {}) {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td><input type="text"   value="${data.desc   ?? ''}"    placeholder="e.g. Rent"  style="width:80px"></td>
+    <td><input type="number" value="${data.amount ?? 2000}"  placeholder="0"           style="width:65px"></td>
+    <td><input type="date"   value="${data.start  ?? ''}"                               style="width:112px"></td>
+    <td><input type="date"   value="${data.end    ?? ''}"                               style="width:112px"></td>
+    <td><button class="del-btn" title="Remove" onclick="this.closest('tr').remove()">×</button></td>
+  `;
+  document.getElementById('spendingBody').appendChild(tr);
+}
+
+function getSpending() {
+  return Array.from(document.querySelectorAll('#spendingBody tr')).map(tr => {
+    const [desc, amt, start, end] = tr.querySelectorAll('input');
+    return {
+      desc:   desc.value,
+      amount: parseFloat(amt.value) || 0,
+      start:  start.value,
+      end:    end.value
+    };
+  });
+}
+
+// ── Inputs ────────────────────────────────────────────────
+function getInputs() {
+  return {
+    startDate:         document.getElementById('startDate').value,
+    numYears:          parseInt(document.getElementById('numYears').value)          || 30,
+    assetsAmount:      parseFloat(document.getElementById('assetsAmount').value)    || 0,
+    assetsGrowth:      parseFloat(document.getElementById('assetsGrowth').value)    || 0,
+    incomeSalary:      parseFloat(document.getElementById('incomeSalary').value)    || 0,
+    incomeRaise:       parseFloat(document.getElementById('incomeRaise').value)     || 0,
+    grants:            getGrants(),
+    houseEnabled:      document.getElementById('houseEnabled').checked,
+    housePurchaseDate: document.getElementById('housePurchaseDate').value,
+    homePrice:         parseFloat(document.getElementById('homePrice').value)        || 0,
+    downPayment:       parseFloat(document.getElementById('downPayment').value)      || 0,
+    loanTerm:          parseInt(document.getElementById('loanTerm').value)           || 30,
+    interestRate:      parseFloat(document.getElementById('interestRate').value)     || 0,
+    propertyTax:       parseFloat(document.getElementById('propertyTax').value)      || 0,
+    taxIncrease:       parseFloat(document.getElementById('taxIncrease').value)      || 0,
+    insurance:         parseFloat(document.getElementById('insurance').value)        || 0,
+    homeAppreciation:  parseFloat(document.getElementById('homeAppreciation').value) || 0,
+    noHouseBaseline:   document.getElementById('noHouseBaseline').checked,
+    spending:          getSpending()
+  };
+}
+
+// ── Vest schedule ─────────────────────────────────────────
+function findNextVestDate(afterDate) {
+  const vestMonths = [3, 9]; // April=3, October=9 (0-indexed)
+  let y  = afterDate.getFullYear();
+  let mo = afterDate.getMonth();
+  for (let i = 0; i < 25; i++) {
+    if (vestMonths.includes(mo)) {
+      const c = new Date(y, mo, 1);
+      if (c >= afterDate) return c;
+    }
+    mo++;
+    if (mo >= 12) { mo = 0; y++; }
+  }
+  return null;
+}
+
+function computeVestSchedule(grants) {
+  const sched = {};
+  for (const g of grants) {
+    if (!g.date || g.amount <= 0) continue;
+    const grantDate = parseLocalDate(g.date);
+    if (!grantDate) continue;
+    const installment = g.amount / 8;
+    let vestDate = findNextVestDate(grantDate);
+    for (let i = 0; i < 8; i++) {
+      if (!vestDate) break;
+      const key = monthKey(vestDate.getFullYear(), vestDate.getMonth());
+      sched[key] = (sched[key] || 0) + installment;
+      vestDate = findNextVestDate(
+        new Date(vestDate.getFullYear(), vestDate.getMonth() + 1, 1)
+      );
+    }
+  }
+  return sched;
+}
+
+// ── Core simulation ───────────────────────────────────────
+function simulateMonths(inp, includeHouse) {
+  if (!inp.startDate) return [];
+  const [sy, sm] = inp.startDate.split('-').map(Number);
+  const startYear = sy;
+  const startMo   = sm - 1; // 0-indexed
+  const total     = inp.numYears * 12;
+
+  // Mortgage pre-calc
+  const principal = Math.max(0, inp.homePrice - inp.downPayment);
+  const mr = (inp.interestRate / 100) / 12;   // monthly rate
+  const np = inp.loanTerm * 12;
+  const fixedPayment = principal <= 0 ? 0
+    : mr > 0
+      ? principal * mr * Math.pow(1 + mr, np) / (Math.pow(1 + mr, np) - 1)
+      : principal / np;
+
+  // Running state
+  let liquid         = inp.assetsAmount;
+  let mortgageBal    = principal;
+  let homeVal        = inp.homePrice;
+  let housePurchased = false;
+  let annualTax      = inp.homePrice * (inp.propertyTax / 100);
+  let currentSalary  = inp.incomeSalary;
+  let lastRaiseYear  = startYear;
+  let lastTaxYear    = null;
+
+  const monthlyGrowth  = Math.pow(1 + inp.assetsGrowth      / 100, 1 / 12) - 1;
+  const monthlyApprec  = Math.pow(1 + inp.homeAppreciation  / 100, 1 / 12) - 1;
+  const vestSched      = computeVestSchedule(inp.grants);
+  const purchaseDate   = (inp.houseEnabled && inp.housePurchaseDate)
+                         ? parseLocalDate(inp.housePurchaseDate) : null;
+
+  const results = [];
+
+  for (let m = 0; m < total; m++) {
+    const absMo   = startMo + m;
+    const year    = startYear + Math.floor(absMo / 12);
+    const month   = absMo % 12;
+    const key     = monthKey(year, month);
+    const curDate = new Date(year, month, 1);
+
+    // Annual salary raise on Jan 1 of each new calendar year
+    if (year > lastRaiseYear) {
+      currentSalary *= (1 + inp.incomeRaise / 100);
+      lastRaiseYear  = year;
+    }
+
+    // House purchase: deduct down payment once
+    if (includeHouse && inp.houseEnabled && !housePurchased && purchaseDate) {
+      if (curDate >= purchaseDate) {
+        liquid        -= inp.downPayment;
+        housePurchased = true;
+        lastTaxYear    = year;
+      }
+    }
+
+    // Property tax annual increase (Jan 1 of each year after purchase)
+    if (housePurchased && lastTaxYear !== null && year > lastTaxYear) {
+      annualTax   *= (1 + inp.taxIncrease / 100);
+      lastTaxYear  = year;
+    }
+
+    // Home appreciation (monthly compound)
+    if (housePurchased) homeVal *= (1 + monthlyApprec);
+
+    // Monthly income
+    const income = currentSalary / 12;
+
+    // RSU vests
+    const vests = vestSched[key] || 0;
+
+    // General spending (active items only)
+    let spending = 0;
+    for (const s of inp.spending) {
+      if (s.amount <= 0) continue;
+      const sStart = s.start ? parseLocalDate(s.start) : null;
+      const sEnd   = s.end   ? parseLocalDate(s.end)   : null;
+      if (sStart && curDate < sStart) continue;
+      if (sEnd   && curDate > sEnd)   continue;
+      spending += s.amount;
+    }
+
+    // House costs
+    let houseCost = 0;
+    if (housePurchased) {
+      if (mortgageBal > 0.01) {
+        const interest = mortgageBal * mr;
+        const princ    = fixedPayment - interest;
+        mortgageBal    = Math.max(0, mortgageBal - princ);
+        houseCost     += fixedPayment;
+      }
+      houseCost += annualTax / 12 + inp.insurance;
+    }
+
+    // Apply growth to liquid assets, then add net cash flow
+    liquid *= (1 + monthlyGrowth);
+    liquid += income + vests - houseCost - spending;
+
+    const equity   = housePurchased ? (homeVal - mortgageBal) : 0;
+    const netWorth = liquid + equity;
+
+    results.push({
+      date: key,
+      netWorth,
+      liquid,
+      equity,
+      homeVal:    housePurchased ? homeVal    : 0,
+      mortgageBal: housePurchased ? mortgageBal : 0
+    });
+  }
+  return results;
+}
+
+// ── Run simulation ────────────────────────────────────────
+function runSimulation() {
+  const inp = getInputs();
+  if (!inp.startDate) return;
+
+  const withHouse = simulateMonths(inp, true);
+  const noHouse   = (inp.houseEnabled && inp.noHouseBaseline)
+                    ? simulateMonths(inp, false) : null;
+
+  simResult = { withHouse, noHouse, inp, labels: withHouse.map(d => labelFromKey(d.date)) };
+
+  const n = withHouse.length - 1;
+  ['rangeStart', 'rangeEnd'].forEach(id => {
+    document.getElementById(id).max = n;
+  });
+  document.getElementById('rangeStart').value = 0;
+  document.getElementById('rangeEnd').value   = n;
+
+  updateChart();
+  updateDelta();
+}
+
+// ── Chart ─────────────────────────────────────────────────
+function initChart() {
+  chart = new Chart(
+    document.getElementById('netWorthChart').getContext('2d'),
+    {
+      type: 'line',
+      data: { labels: [], datasets: [] },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 200 },
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { position: 'top', labels: { boxWidth: 10, font: { size: 11 }, padding: 14 } },
+          tooltip: { callbacks: { label: c => `${c.dataset.label}: ${fmt$(c.parsed.y)}` } }
+        },
+        scales: {
+          x: { ticks: { maxTicksLimit: 10, font: { size: 10 } }, grid: { color: '#f1f5f9' } },
+          y: { ticks: { callback: v => fmtShort(v), font: { size: 10 } }, grid: { color: '#f1f5f9' } }
+        }
+      }
+    }
+  );
+}
+
+function makeLine(label, data, color, dashed) {
+  return {
+    label,
+    data:          data.map(d => d.netWorth),
+    borderColor:   color,
+    backgroundColor: 'transparent',
+    borderWidth:   2,
+    borderDash:    dashed ? [5, 4] : [],
+    pointRadius:   0,
+    tension:       0.3,
+    fill:          false
+  };
+}
+
+function updateChart() {
+  if (!chart || !simResult) return;
+  const ds = [];
+
+  if (simResult.inp.houseEnabled) {
+    ds.push(makeLine('Current (With House)', simResult.withHouse, '#3b82f6', false));
+    if (simResult.noHouse)
+      ds.push(makeLine('Current (No House)',  simResult.noHouse,  '#3b82f6', true));
+  } else {
+    ds.push(makeLine('Current', simResult.withHouse, '#3b82f6', false));
+  }
+
+  for (const sc of scenarios) {
+    if (!sc.visible) continue;
+    ds.push(makeLine(sc.name, sc.data, sc.color, false));
+    if (sc.noHouseData)
+      ds.push(makeLine(`${sc.name} (No House)`, sc.noHouseData, sc.color, true));
+  }
+
+  chart.data.labels   = simResult.labels;
+  chart.data.datasets = ds;
+  chart.update();
+}
+
+// ── Delta panel ───────────────────────────────────────────
+function getAllLines() {
+  const lines = [];
+  if (!simResult) return lines;
+  const inp = simResult.inp;
+
+  lines.push({
+    name:  inp.houseEnabled ? 'With House' : 'Current',
+    data:  simResult.withHouse,
+    color: '#3b82f6'
+  });
+  if (simResult.noHouse)
+    lines.push({ name: 'No House', data: simResult.noHouse, color: '#3b82f6' });
+
+  for (const sc of scenarios) {
+    if (!sc.visible) continue;
+    lines.push({ name: sc.name, data: sc.data, color: sc.color });
+    if (sc.noHouseData)
+      lines.push({ name: `${sc.name} (No House)`, data: sc.noHouseData, color: sc.color });
+  }
+  return lines;
+}
+
+function updateDelta() {
+  if (!simResult) return;
+  let s = parseInt(document.getElementById('rangeStart').value);
+  let e = parseInt(document.getElementById('rangeEnd').value);
+  if (s > e) [s, e] = [e, s];
+
+  const data = simResult.withHouse;
+  if (!data.length) return;
+  s = Math.min(s, data.length - 1);
+  e = Math.min(e, data.length - 1);
+
+  document.getElementById('labelStart').textContent = labelFromKey(data[s].date);
+  document.getElementById('labelEnd').textContent   = labelFromKey(data[e].date);
+
+  const container = document.getElementById('deltaValues');
+  const lines = getAllLines();
+
+  if (!lines.length) {
+    container.innerHTML = '<span class="empty-hint">No data.</span>';
+    return;
+  }
+
+  container.innerHTML = '';
+  for (const ln of lines) {
+    if (ln.data.length <= e) continue;
+    const delta = ln.data[e].netWorth - ln.data[s].netWorth;
+    const div = document.createElement('div');
+    div.className = 'delta-item';
+    div.innerHTML = `
+      <div class="di-label" style="color:${ln.color}">${ln.name}</div>
+      <div class="di-val ${delta >= 0 ? 'pos' : 'neg'}">${delta >= 0 ? '+' : ''}${fmt$(delta)}</div>
+    `;
+    container.appendChild(div);
+  }
+}
+
+// ── Scenarios ─────────────────────────────────────────────
+function saveScenario() {
+  if (!simResult) { runSimulation(); return; }
+  const name = prompt('Scenario name:', `Scenario ${scenarios.length + 1}`);
+  if (!name) return;
+
+  const used  = new Set(scenarios.map(s => s.color));
+  const color = COLORS.find(c => !used.has(c)) || COLORS[scenarios.length % COLORS.length];
+
+  scenarios.push({
+    id:          Date.now(),
+    name,
+    color,
+    visible:     true,
+    data:        simResult.withHouse,
+    noHouseData: simResult.noHouse || null,
+    inputs:      simResult.inp
+  });
+
+  saveToStorage();
+  renderScenarios();
+  updateChart();
+  updateDelta();
+}
+
+function deleteScenario(id) {
+  scenarios = scenarios.filter(s => s.id !== id);
+  saveToStorage(); renderScenarios(); updateChart(); updateDelta();
+}
+
+function toggleScenario(id) {
+  const sc = scenarios.find(s => s.id === id);
+  if (sc) sc.visible = !sc.visible;
+  saveToStorage(); renderScenarios(); updateChart(); updateDelta();
+}
+
+function clearAll() {
+  if (!confirm('Delete all saved scenarios?')) return;
+  scenarios = [];
+  saveToStorage(); renderScenarios(); updateChart(); updateDelta();
+}
+
+function renderScenarios() {
+  const el = document.getElementById('scenariosList');
+  if (!scenarios.length) {
+    el.innerHTML = '<span class="empty-hint">No scenarios saved yet — configure inputs and click "Save Scenario".</span>';
+    return;
+  }
+  el.innerHTML = '';
+  for (const sc of scenarios) {
+    const div = document.createElement('div');
+    div.className = 'sc-item';
+    div.innerHTML = `
+      <div class="sc-dot" style="background:${sc.color}"></div>
+      <div class="sc-name">${sc.name}</div>
+      <button class="sc-badge ${sc.visible ? '' : 'dim'}"
+              onclick="toggleScenario(${sc.id})">${sc.visible ? 'Hide' : 'Show'}</button>
+      <button class="sc-del" onclick="deleteScenario(${sc.id})">Delete</button>
+    `;
+    el.appendChild(div);
+  }
+}
+
+// ── LocalStorage ──────────────────────────────────────────
+function saveToStorage() {
+  try { localStorage.setItem('houseSim_v1', JSON.stringify(scenarios)); } catch {}
+}
+
+function loadFromStorage() {
+  try {
+    const raw = localStorage.getItem('houseSim_v1');
+    if (raw) { scenarios = JSON.parse(raw); renderScenarios(); }
+  } catch {}
+}
+
+// ── Formatters ────────────────────────────────────────────
+function fmt$(v) {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency', currency: 'USD', maximumFractionDigits: 0
+  }).format(v);
+}
+
+function fmtShort(v) {
+  const a = Math.abs(v);
+  if (a >= 1e6) return `$${(v / 1e6).toFixed(1)}M`;
+  if (a >= 1e3) return `$${(v / 1e3).toFixed(0)}K`;
+  return `$${Math.round(v)}`;
+}
+</script>
+</body>
+</html>
