@@ -1086,9 +1086,9 @@ function buildTable() {
     const collapsed = hiddenTableSources.has(src.name);
     const n = JSON.stringify(src.name);
     if (collapsed) {
-      h1 += `<th class="grp grp-collapsed" colspan="1" onclick="toggleTableSource(${n})" style="border-left:3px solid ${src.color};color:${src.color}" title="${src.name}">▶</th>`;
+      h1 += `<th class="grp grp-collapsed" colspan="1" onclick='toggleTableSource(${n})' style="border-left:3px solid ${src.color};color:${src.color}" title="${src.name}">▶</th>`;
     } else {
-      h1 += `<th class="grp" colspan="6" onclick="toggleTableSource(${n})" style="border-left:3px solid ${src.color};color:${src.color}">▼ ${src.name}</th>`;
+      h1 += `<th class="grp" colspan="6" onclick='toggleTableSource(${n})' style="border-left:3px solid ${src.color};color:${src.color}">▼ ${src.name}</th>`;
     }
   }
   h1 += '</tr>';
