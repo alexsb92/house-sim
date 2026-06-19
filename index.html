@@ -350,7 +350,7 @@ body{
 
     <div class="actions">
       <button class="btn btn-primary" onclick="runSimulation()">Calculate</button>
-      <button class="btn btn-success" onclick="saveScenario()">Save Scenario</button>
+      <button class="btn btn-success" id="btnSave" onclick="saveScenario()">Save Scenario</button>
       <button class="btn btn-ghost"   onclick="clearAll()">Clear All</button>
     </div>
   </div><!-- /sidebar -->
@@ -445,6 +445,7 @@ let viewMode         = 'netWorth'; // 'netWorth' | 'liquid'
 let mainView           = 'chart';    // 'chart' | 'table'
 let tableGranularity   = 'monthly';  // 'monthly' | 'yearly'
 let hiddenTableSources = new Set();  // source names collapsed in table
+let activeScenarioId   = null;       // id of scenario loaded into editor
 
 // ── Init ──────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -920,31 +921,39 @@ function updateDelta() {
 }
 
 // ── Scenarios ─────────────────────────────────────────────
+function clearActiveScenario() {
+  activeScenarioId = null;
+  document.getElementById('btnSave').textContent = 'Save Scenario';
+}
+
 function saveScenario() {
   if (!simResult) { runSimulation(); return; }
+
+  if (activeScenarioId !== null) {
+    const existing = scenarios.find(s => s.id === activeScenarioId);
+    if (existing && confirm(`Overwrite "${existing.name}"?\n\nOK = overwrite  ·  Cancel = save as new scenario`)) {
+      existing.data        = simResult.withHouse;
+      existing.noHouseData = simResult.noHouse || null;
+      existing.inputs      = simResult.inp;
+      clearActiveScenario();
+      saveToStorage(); renderScenarios(); updateChart(); updateDelta();
+      return;
+    }
+  }
+
   const name = prompt('Scenario name:', `Scenario ${scenarios.length + 1}`);
   if (!name) return;
-
   const used  = new Set(scenarios.map(s => s.color));
   const color = COLORS.find(c => !used.has(c)) || COLORS[scenarios.length % COLORS.length];
-
-  scenarios.push({
-    id:          Date.now(),
-    name,
-    color,
-    visible:     true,
-    data:        simResult.withHouse,
-    noHouseData: simResult.noHouse || null,
-    inputs:      simResult.inp
-  });
-
-  saveToStorage();
-  renderScenarios();
-  updateChart();
-  updateDelta();
+  scenarios.push({ id: Date.now(), name, color, visible: true,
+                   data: simResult.withHouse, noHouseData: simResult.noHouse || null,
+                   inputs: simResult.inp });
+  clearActiveScenario();
+  saveToStorage(); renderScenarios(); updateChart(); updateDelta();
 }
 
 function deleteScenario(id) {
+  if (activeScenarioId === id) clearActiveScenario();
   scenarios = scenarios.filter(s => s.id !== id);
   saveToStorage(); renderScenarios(); updateChart(); updateDelta();
 }
@@ -999,6 +1008,8 @@ function loadScenario(sc) {
   (i.grants  || []).forEach(g => addGrantRow(g));
   document.getElementById('spendingBody').innerHTML = '';
   (i.spending || []).forEach(s => addSpendingRow(s));
+  activeScenarioId = sc.id;
+  document.getElementById('btnSave').textContent = `Update "${sc.name}"`;
   runSimulation();
 }
 
