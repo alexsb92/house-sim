@@ -285,11 +285,19 @@ body{
             </div>
             <div class="field">
               <label>Home Price ($)</label>
-              <input type="number" id="homePrice" value="800000">
+              <input type="number" id="homePrice" value="800000" oninput="updateCashToClose()">
+            </div>
+            <div class="field">
+              <label>Appraised Value ($) <span style="font-weight:400;color:#94a3b8">(optional)</span></label>
+              <input type="number" id="appraisedValue" value="" placeholder="same as price" oninput="updateCashToClose()">
             </div>
             <div class="field">
               <label>Down Payment ($)</label>
-              <input type="number" id="downPayment" value="160000">
+              <input type="number" id="downPayment" value="160000" oninput="updateCashToClose()">
+            </div>
+            <div class="field" id="cashToCloseRow" style="display:none">
+              <label style="color:#64748b">Cash to close</label>
+              <span id="cashToCloseVal" style="font-size:12px;font-weight:600;color:#1e293b"></span>
             </div>
             <div class="field">
               <label>Loan Term (years)</label>
@@ -362,9 +370,11 @@ body{
         <input type="date" id="startDate" oninput="runSimulation()">
         <label>for</label>
         <input type="range" id="numYears" value="30" min="1" max="50"
-               style="width:100px;accent-color:#3b82f6;cursor:pointer"
-               oninput="document.getElementById('numYearsLabel').textContent=this.value;runSimulation()">
-        <span id="numYearsLabel" style="font-size:11px;font-weight:600;color:#1e293b;min-width:18px;text-align:right">30</span>
+               style="width:80px;accent-color:#3b82f6;cursor:pointer"
+               oninput="document.getElementById('numYearsNum').value=this.value;runSimulation()">
+        <input type="number" id="numYearsNum" value="30" min="1" max="50"
+               style="width:38px;padding:2px 4px;border:1px solid #cbd5e1;border-radius:4px;font-size:11px;color:#1e293b;background:#fff"
+               oninput="document.getElementById('numYears').value=this.value;runSimulation()">
         <label>yrs</label>
       </div>
       <div class="main-tabs">
@@ -488,6 +498,22 @@ function toggleSec(hdr) {
   hdr.nextElementSibling.classList.toggle('hidden');
 }
 
+function updateCashToClose() {
+  const price     = parseFloat(document.getElementById('homePrice').value)     || 0;
+  const appraised = parseFloat(document.getElementById('appraisedValue').value) || price;
+  const down      = parseFloat(document.getElementById('downPayment').value)   || 0;
+  const premium   = Math.max(0, price - appraised);
+  const total     = down + premium;
+  const row       = document.getElementById('cashToCloseRow');
+  if (appraised > 0 && appraised !== price) {
+    document.getElementById('cashToCloseVal').textContent =
+      fmt$(total) + (premium > 0 ? ` (${fmt$(down)} down + ${fmt$(premium)} premium)` : '');
+    row.style.display = '';
+  } else {
+    row.style.display = 'none';
+  }
+}
+
 function toggleHouseFields() {
   document.getElementById('houseFields').style.display =
     document.getElementById('houseEnabled').checked ? '' : 'none';
@@ -564,6 +590,7 @@ function getInputs() {
     houseEnabled:      document.getElementById('houseEnabled').checked,
     housePurchaseDate: document.getElementById('housePurchaseDate').value,
     homePrice:         parseFloat(document.getElementById('homePrice').value)        || 0,
+    appraisedValue:    parseFloat(document.getElementById('appraisedValue').value)  || 0,
     downPayment:       parseFloat(document.getElementById('downPayment').value)      || 0,
     loanTerm:          parseInt(document.getElementById('loanTerm').value)           || 30,
     interestRate:      parseFloat(document.getElementById('interestRate').value)     || 0,
@@ -639,7 +666,8 @@ function simulateMonths(inp, includeHouse) {
   const total     = inp.numYears * 12;
 
   // Mortgage pre-calc
-  const principal = Math.max(0, inp.homePrice - inp.downPayment);
+  const appraised = inp.appraisedValue > 0 ? inp.appraisedValue : inp.homePrice;
+  const principal = Math.max(0, appraised - inp.downPayment);
   const mr = (inp.interestRate / 100) / 12;   // monthly rate
   const np = inp.loanTerm * 12;
   const fixedPayment = principal <= 0 ? 0
@@ -682,7 +710,7 @@ function simulateMonths(inp, includeHouse) {
     // House purchase: deduct down payment once
     if (includeHouse && inp.houseEnabled && !housePurchased && purchaseDate) {
       if (curDate >= purchaseDate) {
-        liquid        -= inp.downPayment;
+        liquid        -= inp.downPayment + Math.max(0, inp.homePrice - appraised);
         housePurchased = true;
         lastTaxYear    = year;
       }
@@ -981,12 +1009,14 @@ function loadScenario(sc) {
   const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val ?? ''; };
   set('startDate',         i.startDate);
   set('numYears',          i.numYears);
+  set('numYearsNum',       i.numYears);
   set('assetsAmount',      i.assetsAmount);
   set('assetsGrowth',      i.assetsGrowth);
   set('incomeSalary',      i.incomeSalary);
   set('incomeRaise',       i.incomeRaise);
   set('housePurchaseDate', i.housePurchaseDate);
   set('homePrice',         i.homePrice);
+  set('appraisedValue',    i.appraisedValue || '');
   set('downPayment',       i.downPayment);
   set('loanTerm',          i.loanTerm);
   set('interestRate',      i.interestRate);
@@ -1004,6 +1034,7 @@ function loadScenario(sc) {
   activeScenarioId = sc.id;
   document.getElementById('btnSave').textContent       = 'Save as New';
   document.getElementById('btnStopEdit').style.display = '';
+  updateCashToClose();
   runSimulation();
 }
 
