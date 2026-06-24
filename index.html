@@ -285,15 +285,21 @@ body{
             </div>
             <div class="field">
               <label>Home Price ($)</label>
-              <input type="number" id="homePrice" value="800000" oninput="updateCashToClose()">
+              <input type="number" id="homePrice" value="800000" oninput="syncDownPaymentFromPct()">
             </div>
             <div class="field">
               <label>Appraised Value ($) <span style="font-weight:400;color:#94a3b8">(optional)</span></label>
-              <input type="number" id="appraisedValue" value="" placeholder="same as price" oninput="updateCashToClose()">
+              <input type="number" id="appraisedValue" value="" placeholder="same as price" oninput="syncDownPaymentFromPct()">
+            </div>
+            <div class="field">
+              <label>Down Payment (%)</label>
+              <input type="number" id="downPaymentPct" value="20" min="0" max="100" step="0.1"
+                     oninput="syncDownPaymentFromPct()">
             </div>
             <div class="field">
               <label>Down Payment ($)</label>
-              <input type="number" id="downPayment" value="160000" oninput="updateCashToClose()">
+              <input type="number" id="downPayment" value="160000"
+                     oninput="syncDownPaymentFromAmt()">
             </div>
             <div class="field" id="cashToCloseRow" style="display:none">
               <label style="color:#64748b">Cash to close</label>
@@ -496,6 +502,26 @@ function labelFromKey(key) {
 function toggleSec(hdr) {
   hdr.classList.toggle('collapsed');
   hdr.nextElementSibling.classList.toggle('hidden');
+}
+
+function getAppraisedRef() {
+  const price     = parseFloat(document.getElementById('homePrice').value)      || 0;
+  const appraised = parseFloat(document.getElementById('appraisedValue').value) || price;
+  return appraised;
+}
+
+function syncDownPaymentFromPct() {
+  const ref = getAppraisedRef();
+  const pct = parseFloat(document.getElementById('downPaymentPct').value) || 0;
+  if (ref > 0) document.getElementById('downPayment').value = Math.round(ref * pct / 100);
+  updateCashToClose();
+}
+
+function syncDownPaymentFromAmt() {
+  const ref = getAppraisedRef();
+  const amt = parseFloat(document.getElementById('downPayment').value) || 0;
+  if (ref > 0) document.getElementById('downPaymentPct').value = +(amt / ref * 100).toFixed(2);
+  updateCashToClose();
 }
 
 function updateCashToClose() {
@@ -1018,6 +1044,10 @@ function loadScenario(sc) {
   set('homePrice',         i.homePrice);
   set('appraisedValue',    i.appraisedValue || '');
   set('downPayment',       i.downPayment);
+  const dpRef = i.appraisedValue || i.homePrice;
+  if (dpRef > 0 && i.downPayment >= 0) {
+    document.getElementById('downPaymentPct').value = +(i.downPayment / dpRef * 100).toFixed(2);
+  }
   set('loanTerm',          i.loanTerm);
   set('interestRate',      i.interestRate);
   set('propertyTax',       i.propertyTax);
