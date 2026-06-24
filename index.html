@@ -384,8 +384,9 @@ body{
         <label>yrs</label>
       </div>
       <div class="main-tabs">
-        <button class="mtab active" id="tabChart" onclick="setMainView('chart')">Chart</button>
-        <button class="mtab"        id="tabTable" onclick="setMainView('table')">Table</button>
+        <button class="mtab active" id="tabChart"    onclick="setMainView('chart')">Chart</button>
+        <button class="mtab"        id="tabTable"    onclick="setMainView('table')">Table</button>
+        <button class="mtab"        id="tabMortgage" onclick="setMainView('mortgage')">Mortgage</button>
       </div>
     </div>
 
@@ -413,6 +414,21 @@ body{
       <div class="table-scroll">
         <table class="data-table" id="dataTable"><thead></thead><tbody></tbody></table>
       </div>
+    </div>
+
+    <div class="chart-card" id="mortgageCard" style="display:none">
+      <div class="chart-hdr">
+        <div style="display:flex;gap:6px;align-items:center">
+          <div class="view-toggle">
+            <button class="vtb active" id="btnMortgageBalance"   onclick="toggleMortgageLine('balance')">Balance</button>
+            <button class="vtb active" id="btnMortgagePrincipal" onclick="toggleMortgageLine('principal')">Principal Paid</button>
+            <button class="vtb active" id="btnMortgageInterest"  onclick="toggleMortgageLine('interest')">Interest Paid</button>
+          </div>
+          <button class="vtb" onclick="mortgageChart && mortgageChart.resetZoom()"
+                  style="border:1px solid #e2e8f0;border-radius:6px">Reset Zoom</button>
+        </div>
+      </div>
+      <canvas id="mortgageChartCanvas"></canvas>
     </div>
 
     <div class="delta-card" id="deltaCard">
@@ -460,6 +476,8 @@ let mainView           = 'chart';    // 'chart' | 'table'
 let tableGranularity   = 'monthly';  // 'monthly' | 'yearly'
 let hiddenTableSources = new Set();  // source names collapsed in table
 let activeScenarioId   = null;       // id of scenario loaded into editor
+let mortgageChart      = null;
+const mortgageLines    = { balance: true, principal: true, interest: true };
 
 // ── Init ──────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -769,13 +787,17 @@ function simulateMonths(inp, includeHouse) {
     }
 
     // House costs
-    let houseCost = 0;
+    let houseCost  = 0;
+    let mInterest  = 0;
+    let mPrincipal = 0;
     if (housePurchased) {
       if (mortgageBal > 0.01) {
         const interest = mortgageBal * mr;
         const princ    = fixedPayment - interest;
         mortgageBal    = Math.max(0, mortgageBal - princ);
         houseCost     += fixedPayment;
+        mInterest  = interest;
+        mPrincipal = princ;
       }
       houseCost += annualTax / 12 + inp.insurance;
     }
@@ -797,7 +819,9 @@ function simulateMonths(inp, includeHouse) {
       income,
       vests,
       spending,
-      houseCost
+      houseCost,
+      mInterest,
+      mPrincipal
     });
   }
   return results;
@@ -859,6 +883,79 @@ function initChart() {
   );
 }
 
+function initMortgageChart() {
+  mortgageChart = new Chart(
+    document.getElementById('mortgageChartCanvas').getContext('2d'),
+    {
+      type: 'line',
+      data: { labels: [], datasets: [] },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 200 },
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { position: 'top', labels: { boxWidth: 10, font: { size: 11 }, padding: 14 } },
+          tooltip: { callbacks: { label: c => `${c.dataset.label}: ${fmt$(c.parsed.y)}` } },
+          zoom: {
+            zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' },
+            pan:  { enabled: true, mode: 'x' }
+          }
+        },
+        scales: {
+          x: { ticks: { maxTicksLimit: 10, font: { size: 10 } }, grid: { color: '#f1f5f9' } },
+          y: { ticks: { callback: v => fmtShort(v), font: { size: 10 } }, grid: { color: '#f1f5f9' } }
+        }
+      }
+    }
+  );
+}
+
+function toggleMortgageLine(type) {
+  mortgageLines[type] = !mortgageLines[type];
+  const ids = { balance: 'btnMortgageBalance', principal: 'btnMortgagePrincipal', interest: 'btnMortgageInterest' };
+  document.getElementById(ids[type]).classList.toggle('active', mortgageLines[type]);
+  updateMortgageChart();
+}
+
+function makeMortgageLine(label, values, color, dash) {
+  return { label, data: values, borderColor: color, backgroundColor: 'transparent',
+           borderWidth: 2, borderDash: dash, pointRadius: 0, tension: 0.3, fill: false };
+}
+
+function cumSum(data, field) {
+  let t = 0;
+  return data.map(d => { t += d[field] || 0; return t; });
+}
+
+function updateMortgageChart() {
+  if (!mortgageChart || !simResult) return;
+  const len = simResult.withHouse.length;
+
+  const sources = [];
+  if (activeScenarioId === null)
+    sources.push({ name: 'Current', data: simResult.withHouse, color: '#3b82f6' });
+  for (const sc of scenarios) {
+    if (!sc.visible) continue;
+    sources.push({ name: sc.name, data: sc.data.slice(0, len), color: sc.color });
+  }
+
+  const ds = [];
+  for (const src of sources) {
+    if (src.data.every(d => !d.mortgageBal)) continue;
+    if (mortgageLines.balance)
+      ds.push(makeMortgageLine(`${src.name} — Balance`, src.data.map(d => d.mortgageBal), src.color, []));
+    if (mortgageLines.principal)
+      ds.push(makeMortgageLine(`${src.name} — Principal Paid`, cumSum(src.data, 'mPrincipal'), src.color, [5, 4]));
+    if (mortgageLines.interest)
+      ds.push(makeMortgageLine(`${src.name} — Interest Paid`, cumSum(src.data, 'mInterest'), src.color, [2, 3]));
+  }
+
+  mortgageChart.data.labels   = simResult.labels;
+  mortgageChart.data.datasets = ds;
+  mortgageChart.update();
+}
+
 function setView(mode) {
   viewMode = mode;
   document.getElementById('btnNetWorth').classList.toggle('active', mode === 'netWorth');
@@ -915,6 +1012,7 @@ function updateChart() {
     if (hiddenLabels.has(dataset.label)) chart.getDatasetMeta(i).hidden = true;
   });
   chart.update();
+  if (mortgageChart) updateMortgageChart();
 }
 
 // ── Delta panel ───────────────────────────────────────────
@@ -1102,12 +1200,15 @@ function renderScenarios() {
 // ── Table view ────────────────────────────────────────────
 function setMainView(mode) {
   mainView = mode;
-  document.getElementById('tabChart').classList.toggle('active', mode === 'chart');
-  document.getElementById('tabTable').classList.toggle('active', mode === 'table');
-  document.getElementById('chartCard').style.display = mode === 'chart' ? '' : 'none';
-  document.getElementById('deltaCard').style.display = mode === 'chart' ? '' : 'none';
-  document.getElementById('tableCard').style.display = mode === 'table' ? '' : 'none';
-  if (mode === 'table') buildTable();
+  document.getElementById('tabChart').classList.toggle('active',    mode === 'chart');
+  document.getElementById('tabTable').classList.toggle('active',    mode === 'table');
+  document.getElementById('tabMortgage').classList.toggle('active', mode === 'mortgage');
+  document.getElementById('chartCard').style.display    = mode === 'chart'    ? '' : 'none';
+  document.getElementById('deltaCard').style.display    = mode === 'chart'    ? '' : 'none';
+  document.getElementById('tableCard').style.display    = mode === 'table'    ? '' : 'none';
+  document.getElementById('mortgageCard').style.display = mode === 'mortgage' ? '' : 'none';
+  if (mode === 'table')    buildTable();
+  if (mode === 'mortgage') { if (!mortgageChart) initMortgageChart(); updateMortgageChart(); }
 }
 
 function setTableGranularity(g) {
