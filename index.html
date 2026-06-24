@@ -350,7 +350,8 @@ body{
 
     <div class="actions">
       <button class="btn btn-primary" onclick="runSimulation()">Calculate</button>
-      <button class="btn btn-success" id="btnSave" onclick="saveScenario()">Save Scenario</button>
+      <button class="btn btn-success" id="btnSave"     onclick="saveScenario()">Save Scenario</button>
+      <button class="btn btn-ghost"   id="btnStopEdit" onclick="clearActiveScenario()" style="display:none">Stop Editing</button>
       <button class="btn btn-ghost"   onclick="clearAll()">Clear All</button>
     </div>
   </div><!-- /sidebar -->
@@ -762,6 +763,16 @@ function runSimulation() {
 
   simResult = { withHouse, noHouse, inp, labels: withHouse.map(d => labelFromKey(d.date)) };
 
+  if (activeScenarioId !== null) {
+    const sc = scenarios.find(s => s.id === activeScenarioId);
+    if (sc) {
+      sc.data        = simResult.withHouse;
+      sc.noHouseData = simResult.noHouse || null;
+      sc.inputs      = simResult.inp;
+      saveToStorage();
+    }
+  }
+
   const n = withHouse.length - 1;
   ['rangeStart', 'rangeEnd'].forEach(id => {
     document.getElementById(id).max = n;
@@ -837,12 +848,14 @@ function updateChart() {
   );
 
   const ds = [];
-  if (simResult.inp.houseEnabled) {
-    ds.push(makeLine('Current (With House)', simResult.withHouse, '#3b82f6', false));
-    if (simResult.noHouse)
-      ds.push(makeLine('Current (No House)',  simResult.noHouse,  '#3b82f6', true));
-  } else {
-    ds.push(makeLine('Current', simResult.withHouse, '#3b82f6', false));
+  if (activeScenarioId === null) {
+    if (simResult.inp.houseEnabled) {
+      ds.push(makeLine('Current (With House)', simResult.withHouse, '#3b82f6', false));
+      if (simResult.noHouse)
+        ds.push(makeLine('Current (No House)',  simResult.noHouse,  '#3b82f6', true));
+    } else {
+      ds.push(makeLine('Current', simResult.withHouse, '#3b82f6', false));
+    }
   }
 
   for (const sc of scenarios) {
@@ -866,13 +879,15 @@ function getAllLines() {
   if (!simResult) return lines;
   const inp = simResult.inp;
 
-  lines.push({
-    name:  inp.houseEnabled ? 'With House' : 'Current',
-    data:  simResult.withHouse,
-    color: '#3b82f6'
-  });
-  if (simResult.noHouse)
-    lines.push({ name: 'No House', data: simResult.noHouse, color: '#3b82f6' });
+  if (activeScenarioId === null) {
+    lines.push({
+      name:  inp.houseEnabled ? 'With House' : 'Current',
+      data:  simResult.withHouse,
+      color: '#3b82f6'
+    });
+    if (simResult.noHouse)
+      lines.push({ name: 'No House', data: simResult.noHouse, color: '#3b82f6' });
+  }
 
   for (const sc of scenarios) {
     if (!sc.visible) continue;
@@ -923,24 +938,15 @@ function updateDelta() {
 // ── Scenarios ─────────────────────────────────────────────
 function clearActiveScenario() {
   activeScenarioId = null;
-  document.getElementById('btnSave').textContent = 'Save Scenario';
+  document.getElementById('btnSave').textContent       = 'Save Scenario';
+  document.getElementById('btnStopEdit').style.display = 'none';
+  updateChart();
+  updateDelta();
 }
 
 function saveScenario() {
   runSimulation();
   if (!simResult) return;
-
-  if (activeScenarioId !== null) {
-    const existing = scenarios.find(s => s.id === activeScenarioId);
-    if (existing && confirm(`Overwrite "${existing.name}"?\n\nOK = overwrite  ·  Cancel = save as new scenario`)) {
-      existing.data        = simResult.withHouse;
-      existing.noHouseData = simResult.noHouse || null;
-      existing.inputs      = simResult.inp;
-      clearActiveScenario();
-      saveToStorage(); renderScenarios(); updateChart(); updateDelta();
-      return;
-    }
-  }
 
   const name = prompt('Scenario name:', `Scenario ${scenarios.length + 1}`);
   if (!name) return;
@@ -1010,7 +1016,8 @@ function loadScenario(sc) {
   document.getElementById('spendingBody').innerHTML = '';
   (i.spending || []).forEach(s => addSpendingRow(s));
   activeScenarioId = sc.id;
-  document.getElementById('btnSave').textContent = `Update "${sc.name}"`;
+  document.getElementById('btnSave').textContent       = 'Save as New';
+  document.getElementById('btnStopEdit').style.display = '';
   runSimulation();
 }
 
@@ -1031,9 +1038,13 @@ function renderScenarios() {
   for (const sc of scenarios) {
     const div = document.createElement('div');
     div.className = 'sc-item';
+    const editingBadge = sc.id === activeScenarioId
+      ? '<span class="sc-badge" style="background:#dbeafe;color:#2563eb;border-color:#bfdbfe">editing</span>'
+      : '';
     div.innerHTML = `
       <div class="sc-dot" style="background:${sc.color}"></div>
       <div class="sc-name" onclick="loadScenario(scenarios.find(s=>s.id===${sc.id}))" title="Click to load into editor">${sc.name}</div>
+      ${editingBadge}
       <button class="sc-badge ${sc.visible ? '' : 'dim'}" onclick="toggleScenario(${sc.id})">${sc.visible ? 'Hide' : 'Show'}</button>
       <button class="sc-badge" onclick="duplicateScenario(${sc.id})">Dup</button>
       <button class="sc-badge" onclick="renameScenario(${sc.id})">Rename</button>
