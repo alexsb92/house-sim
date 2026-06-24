@@ -421,8 +421,8 @@ body{
         <div style="display:flex;gap:6px;align-items:center">
           <div class="view-toggle">
             <button class="vtb active" id="btnMortgageBalance"   onclick="toggleMortgageLine('balance')">Balance</button>
-            <button class="vtb active" id="btnMortgagePrincipal" onclick="toggleMortgageLine('principal')">Principal Paid</button>
-            <button class="vtb active" id="btnMortgageInterest"  onclick="toggleMortgageLine('interest')">Interest Paid</button>
+            <button class="vtb active" id="btnMortgagePrincipal" onclick="toggleMortgageLine('principal')">Principal</button>
+            <button class="vtb active" id="btnMortgageInterest"  onclick="toggleMortgageLine('interest')">Interest</button>
           </div>
           <button class="vtb" onclick="mortgageChart && mortgageChart.resetZoom()"
                   style="border:1px solid #e2e8f0;border-radius:6px">Reset Zoom</button>
@@ -895,7 +895,7 @@ function initMortgageChart() {
         animation: { duration: 200 },
         interaction: { mode: 'index', intersect: false },
         plugins: {
-          legend: { position: 'top', labels: { boxWidth: 10, font: { size: 11 }, padding: 14 } },
+          legend: { display: false },
           tooltip: { callbacks: { label: c => `${c.dataset.label}: ${fmt$(c.parsed.y)}` } },
           zoom: {
             zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' },
