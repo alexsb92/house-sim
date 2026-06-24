@@ -137,10 +137,7 @@ body{
   font-size:10px;font-weight:700;text-transform:uppercase;
   letter-spacing:.06em;color:#64748b;
 }
-.range-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.range-lbl{font-size:11px;color:#64748b;white-space:nowrap}
-.range-row input[type=range]{flex:1;min-width:80px;accent-color:#3b82f6;cursor:pointer}
-.range-date{font-size:11px;font-weight:600;color:#1e293b;min-width:72px;text-align:center}
+
 .delta-values{display:flex;gap:20px;flex-wrap:wrap;min-height:20px}
 .di-label{font-size:10px;color:#94a3b8}
 .di-val{font-size:13px;font-weight:700}
@@ -403,14 +400,11 @@ body{
     </div>
 
     <div class="delta-card" id="deltaCard">
-      <div class="panel-title">Net Worth Change in Selected Period</div>
-      <div class="range-row">
-        <span class="range-lbl">From</span>
-        <input type="range" id="rangeStart" min="0" max="359" value="0"   oninput="updateDelta()">
-        <span class="range-date" id="labelStart">—</span>
-        <span class="range-lbl">To</span>
-        <input type="range" id="rangeEnd"   min="0" max="359" value="359" oninput="updateDelta()">
-        <span class="range-date" id="labelEnd">—</span>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span class="panel-title">Net Worth Change</span>
+        <span id="labelStart" style="font-size:10px;color:#94a3b8">—</span>
+        <span style="font-size:10px;color:#94a3b8">→</span>
+        <span id="labelEnd"   style="font-size:10px;color:#94a3b8">—</span>
       </div>
       <div class="delta-values" id="deltaValues">
         <span class="empty-hint">Run the simulation to see deltas.</span>
@@ -776,13 +770,6 @@ function runSimulation() {
     }
   }
 
-  const n = withHouse.length - 1;
-  ['rangeStart', 'rangeEnd'].forEach(id => {
-    document.getElementById(id).max = n;
-  });
-  document.getElementById('rangeStart').value = 0;
-  document.getElementById('rangeEnd').value   = n;
-
   updateChart();
   updateDelta();
   if (mainView === 'table') buildTable();
@@ -903,14 +890,10 @@ function getAllLines() {
 
 function updateDelta() {
   if (!simResult) return;
-  let s = parseInt(document.getElementById('rangeStart').value);
-  let e = parseInt(document.getElementById('rangeEnd').value);
-  if (s > e) [s, e] = [e, s];
-
   const data = simResult.withHouse;
   if (!data.length) return;
-  s = Math.min(s, data.length - 1);
-  e = Math.min(e, data.length - 1);
+  const s = 0;
+  const e = data.length - 1;
 
   document.getElementById('labelStart').textContent = labelFromKey(data[s].date);
   document.getElementById('labelEnd').textContent   = labelFromKey(data[e].date);
