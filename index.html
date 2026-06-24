@@ -821,6 +821,7 @@ function runSimulation() {
       sc.noHouseData = simResult.noHouse || null;
       sc.inputs      = simResult.inp;
       saveToStorage();
+      renderScenarios();
     }
   }
 
@@ -862,8 +863,6 @@ function setView(mode) {
   viewMode = mode;
   document.getElementById('btnNetWorth').classList.toggle('active', mode === 'netWorth');
   document.getElementById('btnLiquid').classList.toggle('active', mode === 'liquid');
-  document.getElementById('chartViewLabel').textContent =
-    mode === 'netWorth' ? 'Net Worth' : 'Liquid Assets';
   updateChart();
   updateDelta();
 }
@@ -902,11 +901,12 @@ function updateChart() {
     }
   }
 
+  const len = simResult.withHouse.length;
   for (const sc of scenarios) {
     if (!sc.visible) continue;
-    ds.push(makeLine(sc.name, sc.data, sc.color, false));
+    ds.push(makeLine(sc.name, sc.data.slice(0, len), sc.color, false));
     if (sc.noHouseData)
-      ds.push(makeLine(`${sc.name} (No House)`, sc.noHouseData, sc.color, true));
+      ds.push(makeLine(`${sc.name} (No House)`, sc.noHouseData.slice(0, len), sc.color, true));
   }
 
   chart.data.labels   = simResult.labels;
@@ -1033,9 +1033,6 @@ function renameScenario(id) {
 function loadScenario(sc) {
   const i = sc.inputs;
   const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val ?? ''; };
-  set('startDate',         i.startDate);
-  set('numYears',          i.numYears);
-  set('numYearsNum',       i.numYears);
   set('assetsAmount',      i.assetsAmount);
   set('assetsGrowth',      i.assetsGrowth);
   set('incomeSalary',      i.incomeSalary);
