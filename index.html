@@ -329,13 +329,6 @@ body{
               <label>Home Appreciation (%/yr)</label>
               <input type="number" id="homeAppreciation" value="3" step="0.1">
             </div>
-            <div class="field" style="margin-top:4px">
-              <label>Show No-House Baseline</label>
-              <label class="toggle">
-                <input type="checkbox" id="noHouseBaseline" checked>
-                <span class="tslider"></span>
-              </label>
-            </div>
           </div>
         </div>
       </div>
@@ -642,7 +635,6 @@ function getInputs() {
     taxIncrease:       parseFloat(document.getElementById('taxIncrease').value)      || 0,
     insurance:         parseFloat(document.getElementById('insurance').value)        || 0,
     homeAppreciation:  parseFloat(document.getElementById('homeAppreciation').value) || 0,
-    noHouseBaseline:   document.getElementById('noHouseBaseline').checked,
     spending:          getSpending()
   };
 }
@@ -702,7 +694,7 @@ function computeVestSchedule(grants, simEndDate) {
 }
 
 // ── Core simulation ───────────────────────────────────────
-function simulateMonths(inp, includeHouse) {
+function simulateMonths(inp) {
   if (!inp.startDate) return [];
   const [sy, sm] = inp.startDate.split('-').map(Number);
   const startYear = sy;
@@ -752,7 +744,7 @@ function simulateMonths(inp, includeHouse) {
     }
 
     // House purchase: deduct down payment once
-    if (includeHouse && inp.houseEnabled && !housePurchased && purchaseDate) {
+    if (inp.houseEnabled && !housePurchased && purchaseDate) {
       if (curDate >= purchaseDate) {
         liquid        -= inp.downPayment + Math.max(0, inp.homePrice - appraised);
         housePurchased = true;
@@ -832,18 +824,15 @@ function runSimulation() {
   const inp = getInputs();
   if (!inp.startDate) return;
 
-  const withHouse = simulateMonths(inp, true);
-  const noHouse   = (inp.houseEnabled && inp.noHouseBaseline)
-                    ? simulateMonths(inp, false) : null;
+  const withHouse = simulateMonths(inp);
 
-  simResult = { withHouse, noHouse, inp, labels: withHouse.map(d => labelFromKey(d.date)) };
+  simResult = { withHouse, inp, labels: withHouse.map(d => labelFromKey(d.date)) };
 
   if (activeScenarioId !== null) {
     const sc = scenarios.find(s => s.id === activeScenarioId);
     if (sc) {
-      sc.data        = simResult.withHouse;
-      sc.noHouseData = simResult.noHouse || null;
-      sc.inputs      = simResult.inp;
+      sc.data   = simResult.withHouse;
+      sc.inputs = simResult.inp;
       saveToStorage();
       renderScenarios();
     }
@@ -988,22 +977,13 @@ function updateChart() {
   );
 
   const ds = [];
-  if (activeScenarioId === null) {
-    if (simResult.inp.houseEnabled) {
-      ds.push(makeLine('Current (With House)', simResult.withHouse, '#3b82f6', false));
-      if (simResult.noHouse)
-        ds.push(makeLine('Current (No House)',  simResult.noHouse,  '#3b82f6', true));
-    } else {
-      ds.push(makeLine('Current', simResult.withHouse, '#3b82f6', false));
-    }
-  }
+  if (activeScenarioId === null)
+    ds.push(makeLine('Current', simResult.withHouse, '#3b82f6', false));
 
   const len = simResult.withHouse.length;
   for (const sc of scenarios) {
     if (!sc.visible) continue;
     ds.push(makeLine(sc.name, sc.data.slice(0, len), sc.color, false));
-    if (sc.noHouseData)
-      ds.push(makeLine(`${sc.name} (No House)`, sc.noHouseData.slice(0, len), sc.color, true));
   }
 
   chart.data.labels   = simResult.labels;
@@ -1021,21 +1001,12 @@ function getAllLines() {
   if (!simResult) return lines;
   const inp = simResult.inp;
 
-  if (activeScenarioId === null) {
-    lines.push({
-      name:  inp.houseEnabled ? 'With House' : 'Current',
-      data:  simResult.withHouse,
-      color: '#3b82f6'
-    });
-    if (simResult.noHouse)
-      lines.push({ name: 'No House', data: simResult.noHouse, color: '#3b82f6' });
-  }
+  if (activeScenarioId === null)
+    lines.push({ name: 'Current', data: simResult.withHouse, color: '#3b82f6' });
 
   for (const sc of scenarios) {
     if (!sc.visible) continue;
     lines.push({ name: sc.name, data: sc.data, color: sc.color });
-    if (sc.noHouseData)
-      lines.push({ name: `${sc.name} (No House)`, data: sc.noHouseData, color: sc.color });
   }
   return lines;
 }
@@ -1091,8 +1062,7 @@ function saveScenario() {
   const used  = new Set(scenarios.map(s => s.color));
   const color = COLORS.find(c => !used.has(c)) || COLORS[scenarios.length % COLORS.length];
   scenarios.push({ id: Date.now(), name, color, visible: true,
-                   data: simResult.withHouse, noHouseData: simResult.noHouse || null,
-                   inputs: simResult.inp });
+                   data: simResult.withHouse, inputs: simResult.inp });
   clearActiveScenario();
   saveToStorage(); renderScenarios(); updateChart(); updateDelta();
 }
@@ -1150,7 +1120,6 @@ function loadScenario(sc) {
   set('insurance',         i.insurance);
   set('homeAppreciation',  i.homeAppreciation);
   document.getElementById('houseEnabled').checked    = !!i.houseEnabled;
-  document.getElementById('noHouseBaseline').checked = !!i.noHouseBaseline;
   toggleHouseFields();
   document.getElementById('grantsBody').innerHTML = '';
   (i.grants  || []).forEach(g => addGrantRow(g));
@@ -1233,19 +1202,10 @@ function buildTable() {
 
   // Gather sources: current sim + visible saved scenarios
   const sources = [];
-  const inp = simResult.inp;
-  sources.push({
-    name:  inp.houseEnabled ? 'Current (With House)' : 'Current',
-    data:  simResult.withHouse,
-    color: '#3b82f6'
-  });
-  if (simResult.noHouse)
-    sources.push({ name: 'Current (No House)', data: simResult.noHouse, color: '#3b82f6' });
+  sources.push({ name: 'Current', data: simResult.withHouse, color: '#3b82f6' });
   for (const sc of scenarios) {
     if (!sc.visible) continue;
     sources.push({ name: sc.name, data: sc.data, color: sc.color });
-    if (sc.noHouseData)
-      sources.push({ name: `${sc.name} (No House)`, data: sc.noHouseData, color: sc.color });
   }
 
   // Header row 1: Date + one group header per source
