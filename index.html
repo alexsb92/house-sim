@@ -201,6 +201,32 @@ body{
 .data-table .grp-collapsed{width:14px;padding:4px 3px;font-size:9px}
 .data-table .col-collapsed{width:14px;padding:0}
 .data-table .td-collapsed{width:14px;padding:0}
+/* ── Table event rows ─────────────────────────────────────── */
+.data-table tr.has-events{cursor:pointer}
+.data-table tr.has-events td:first-child{color:#3b82f6}
+.data-table tr.has-events:hover td{background:#eff6ff}
+.data-table tr.has-events:hover td:first-child{background:#dbeafe}
+.tbl-expand{font-size:9px;margin-right:4px;display:inline-block;transition:transform .12s}
+.ev-sub-row td{padding:0;border-bottom:1px solid #e2e8f0;background:#f0f7ff}
+.ev-sub-inner{padding:6px 12px 8px 24px;display:flex;flex-direction:column;gap:4px}
+.ev-type-row{display:flex;align-items:baseline;gap:6px;flex-wrap:wrap}
+.ev-type-lbl{font-size:9px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;width:68px;flex-shrink:0;padding-top:1px}
+.ev-chip{display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:500;white-space:nowrap}
+.ev-rsu{background:#d1fae5;color:#059669}
+.ev-house{background:#fef3c7;color:#d97706}
+.ev-grant{background:#ede9fe;color:#7c3aed}
+.ev-spend{background:#fee2e2;color:#dc2626}
+@media(prefers-color-scheme:dark){
+  .data-table tr.has-events td:first-child{color:#60a5fa}
+  .data-table tr.has-events:hover td{background:#1e3a5f}
+  .data-table tr.has-events:hover td:first-child{background:#1e3a5f}
+  .ev-sub-row td{background:#1e293b}
+  .ev-sub-inner{background:#1e293b}
+  .ev-rsu{background:#064e3b;color:#34d399}
+  .ev-house{background:#78350f;color:#fbbf24}
+  .ev-grant{background:#2e1065;color:#a78bfa}
+  .ev-spend{background:#7f1d1d;color:#f87171}
+}
 </style>
 </head>
 <body>
@@ -396,9 +422,13 @@ body{
     <div class="table-card" id="tableCard" style="display:none">
       <div class="table-hdr">
         <span class="panel-title">Monthly Breakdown</span>
-        <div class="view-toggle">
-          <button class="vtb active" id="btnMonthly" onclick="setTableGranularity('monthly')">Monthly</button>
-          <button class="vtb"        id="btnYearly"  onclick="setTableGranularity('yearly')">Yearly</button>
+        <div style="display:flex;align-items:center;gap:6px">
+          <div class="view-toggle">
+            <button class="vtb active" id="btnMonthly" onclick="setTableGranularity('monthly')">Monthly</button>
+            <button class="vtb"        id="btnYearly"  onclick="setTableGranularity('yearly')">Yearly</button>
+          </div>
+          <button class="vtb" id="btnTableEvents" onclick="toggleTableEvents()"
+                  style="border:1px solid #e2e8f0;border-radius:6px">Events</button>
         </div>
       </div>
       <div class="table-scroll">
@@ -468,6 +498,8 @@ let hiddenTableSources = new Set();  // source names collapsed in table
 let activeScenarioId   = null;       // id of scenario loaded into editor
 let mortgageChart      = null;
 const mortgageLines    = { balance: true, principal: true, interest: true };
+let tableEventsOn      = false;
+let tableExpandedRows  = new Set();
 
 // ── Init ──────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -789,12 +821,42 @@ function simulateMonths(inp) {
       }
     }
 
+    // Events for this month
+    const events = [];
+
+    // Grant issuance events
+    for (const g of inp.grants) {
+      if (!g.date) continue;
+      const gd = parseLocalDate(g.date);
+      if (!gd || gd.getMonth() !== month) continue;
+      const n = year - gd.getFullYear();
+      if (n < 0 || (!g.recurring && n > 0)) continue;
+      const gAmt = g.amount * Math.pow(1 + (g.growthRate || 0) / 100, n);
+      events.push({ type: 'grant',
+        label: (g.type === 'vest' ? 'Vest' : '4-yr grant') + ' issued',
+        detail: fmt$(gAmt) + (n > 0 ? ` (yr ${n + 1})` : '') });
+    }
+
+    // Spending boundary events
+    for (const s of inp.spending) {
+      if (!s.amount) continue;
+      const sStart = s.start ? parseLocalDate(s.start) : null;
+      const sEnd   = s.end   ? parseLocalDate(s.end)   : null;
+      const nm     = s.desc || 'Spending';
+      if (sStart && sStart.getFullYear() === year && sStart.getMonth() === month)
+        events.push({ type: 'spend', label: `${nm} started`, detail: `${fmt$(s.amount)}/mo` });
+      if (sEnd && sEnd.getFullYear() === year && sEnd.getMonth() === month)
+        events.push({ type: 'spend', label: `${nm} ended`, detail: `was ${fmt$(s.amount)}/mo` });
+    }
+
     // House purchase: deduct down payment once
     if (inp.houseEnabled && !housePurchased && purchaseDate) {
       if (curDate >= purchaseDate) {
         liquid        -= inp.downPayment + Math.max(0, inp.homePrice - appraised);
         housePurchased = true;
         lastTaxYear    = year;
+        events.push({ type: 'house', label: 'House purchased',
+          detail: `${fmt$(inp.homePrice)}, ${fmt$(inp.downPayment)} down, ${inp.loanTerm}yr @ ${inp.interestRate}%` });
       }
     }
 
@@ -812,6 +874,7 @@ function simulateMonths(inp) {
 
     // RSU vests
     const vests = vestSched[key] || 0;
+    if (vests > 0) events.push({ type: 'rsu', label: 'RSU vest', detail: fmt$(vests) });
 
     // General spending (active items only)
     let spending = 0;
@@ -859,7 +922,8 @@ function simulateMonths(inp) {
       spending,
       houseCost,
       mInterest,
-      mPrincipal
+      mPrincipal,
+      events
     });
   }
   return results;
@@ -1291,11 +1355,22 @@ function buildTable() {
   const monthly = tableGranularity === 'monthly';
   let rows = '';
 
+  const colCount = 1 + sources.reduce((n, s) => n + (hiddenTableSources.has(s.name) ? 1 : 6), 0);
+
   if (monthly) {
     const len = Math.max(...sources.map(s => s.data.length));
     for (let i = 0; i < len; i++) {
-      const label = sources[0].data[i] ? labelFromKey(sources[0].data[i].date) : '';
-      rows += `<tr><td>${label}</td>`;
+      const pt0    = sources[0].data[i];
+      const rowKey = pt0 ? pt0.date : String(i);
+      const label  = pt0 ? labelFromKey(pt0.date) : '';
+
+      const evts = collectEvents(sources.map(s => s.data[i]));
+      const hasEvt = tableEventsOn && evts.length > 0;
+      const isExp  = hasEvt && tableExpandedRows.has(rowKey);
+      const arrow  = hasEvt ? `<span class="tbl-expand" style="transform:rotate(${isExp?90:0}deg)">▶</span>` : '';
+
+      rows += `<tr${hasEvt ? ` class="has-events" onclick="toggleTableRow('${rowKey}')"` : ''}>`;
+      rows += `<td>${arrow}${label}</td>`;
       for (const src of sources) {
         if (hiddenTableSources.has(src.name)) {
           rows += `<td class="td-collapsed" style="border-left:3px solid ${src.color}"></td>`;
@@ -1304,11 +1379,22 @@ function buildTable() {
         }
       }
       rows += '</tr>';
+      if (isExp) rows += buildEventSubRow(evts, colCount);
     }
   } else {
     const yearGroups = buildYearGroups(sources);
     for (const yr of yearGroups) {
-      rows += `<tr><td>${yr.label}</td>`;
+      const rowKey = yr.label;
+      const evts   = collectEvents(
+        sources.flatMap(s => s.data.filter(d => d.date.startsWith(yr.label))),
+        true
+      );
+      const hasEvt = tableEventsOn && evts.length > 0;
+      const isExp  = hasEvt && tableExpandedRows.has(rowKey);
+      const arrow  = hasEvt ? `<span class="tbl-expand" style="transform:rotate(${isExp?90:0}deg)">▶</span>` : '';
+
+      rows += `<tr${hasEvt ? ` class="has-events" onclick="toggleTableRow('${rowKey}')"` : ''}>`;
+      rows += `<td>${arrow}${yr.label}</td>`;
       for (const src of sources) {
         if (hiddenTableSources.has(src.name)) {
           rows += `<td class="td-collapsed" style="border-left:3px solid ${src.color}"></td>`;
@@ -1317,10 +1403,56 @@ function buildTable() {
         }
       }
       rows += '</tr>';
+      if (isExp) rows += buildEventSubRow(evts, colCount);
     }
   }
 
   tbl.tBodies[0].innerHTML = rows;
+}
+
+function toggleTableEvents() {
+  tableEventsOn = !tableEventsOn;
+  tableExpandedRows.clear();
+  document.getElementById('btnTableEvents').classList.toggle('active', tableEventsOn);
+  buildTable();
+}
+
+function toggleTableRow(key) {
+  tableExpandedRows.has(key) ? tableExpandedRows.delete(key) : tableExpandedRows.add(key);
+  buildTable();
+}
+
+function collectEvents(points, addMonth = false) {
+  const out = [], seen = new Set();
+  for (const pt of points) {
+    if (!pt || !pt.events) continue;
+    const prefix = addMonth ? labelFromKey(pt.date) + ': ' : '';
+    for (const ev of pt.events) {
+      const k = `${ev.type}|${prefix}${ev.label}|${ev.detail}`;
+      if (!seen.has(k)) { seen.add(k); out.push({ ...ev, label: prefix + ev.label }); }
+    }
+  }
+  return out;
+}
+
+function buildEventSubRow(evts, colCount) {
+  const typeOrder = [], byType = {};
+  for (const ev of evts) {
+    if (!byType[ev.type]) { byType[ev.type] = []; typeOrder.push(ev.type); }
+    byType[ev.type].push(ev);
+  }
+  const typeLabels = { rsu: 'RSU Vests', house: 'House', grant: 'Grant', spend: 'Spending' };
+  const typeColors = { rsu: '#059669', house: '#d97706', grant: '#7c3aed', spend: '#dc2626' };
+  let inner = '';
+  for (const type of typeOrder) {
+    const chips = byType[type].map(ev =>
+      `<span class="ev-chip ev-${type}">${ev.label} — ${ev.detail}</span>`
+    ).join('');
+    inner += `<div class="ev-type-row">
+      <span class="ev-type-lbl" style="color:${typeColors[type]}">${typeLabels[type]}</span>${chips}
+    </div>`;
+  }
+  return `<tr class="ev-sub-row"><td colspan="${colCount}"><div class="ev-sub-inner">${inner}</div></td></tr>`;
 }
 
 function buildDataCells(d, color) {
