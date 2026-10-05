@@ -536,8 +536,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   updateEditorVisibility();
   initChart();
-  if (editorOpen) runSimulation();
-  else { updateChart(); updateDelta(); }
+  runSimulation();
 });
 
 // ── Date helpers ──────────────────────────────────────────
@@ -1111,16 +1110,18 @@ function updateChart() {
   );
 
   const ds = [];
-  if (activeScenarioId === null && editorOpen)
+  const showNew = activeScenarioId === null && editorOpen;
+  if (showNew)
     ds.push(makeLine('New Scenario', simResult.withHouse, '#3b82f6', false));
 
-  const len = simResult.withHouse.length;
+  const len = showNew ? simResult.withHouse.length : null;
   for (const sc of scenarios) {
     if (!sc.visible) continue;
-    ds.push(makeLine(sc.name, sc.data.slice(0, len), sc.color, false));
+    ds.push(makeLine(sc.name, len ? sc.data.slice(0, len) : sc.data, sc.color, false));
   }
 
-  chart.data.labels   = simResult.labels;
+  const firstSrc = showNew ? simResult.withHouse : (scenarios.find(s => s.visible)?.data ?? []);
+  chart.data.labels = firstSrc.map(d => labelFromKey(d.date));
   chart.data.datasets = ds;
   ds.forEach((dataset, i) => {
     if (hiddenLabels.has(dataset.label)) chart.getDatasetMeta(i).hidden = true;
