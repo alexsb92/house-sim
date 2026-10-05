@@ -153,6 +153,15 @@ body{
 .di-val.pos{color:#10b981}
 .di-val.neg{color:#ef4444}
 
+/* Toast */
+.toast{
+  position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(12px);
+  background:#1e293b;color:#f1f5f9;font-size:13px;padding:9px 18px;
+  border-radius:8px;opacity:0;pointer-events:none;
+  transition:opacity .2s,transform .2s;z-index:9999;white-space:nowrap;
+}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
 /* Trend panel */
 .trend-cards{display:flex;gap:10px;flex-wrap:wrap;padding:4px 0 16px}
 .trend-card{
@@ -507,8 +516,12 @@ body{
     <div class="sc-card">
       <div class="sc-head">
         <span class="panel-title">Saved Scenarios</span>
-        <button class="vtb" onclick="startNewScenario()"
-                style="border:1px solid #e2e8f0;border-radius:6px;padding:3px 10px">+ New</button>
+        <div style="display:flex;gap:6px">
+          <button class="vtb" id="btnShare" onclick="exportToURL()"
+                  style="border:1px solid #e2e8f0;border-radius:6px;padding:3px 10px">Share</button>
+          <button class="vtb" onclick="startNewScenario()"
+                  style="border:1px solid #e2e8f0;border-radius:6px;padding:3px 10px">+ New</button>
+        </div>
       </div>
       <div class="sc-list" id="scenariosList">
         <span class="empty-hint">No scenarios saved yet — click "+ New Scenario" to get started.</span>
@@ -517,10 +530,12 @@ body{
 
   </div><!-- /main -->
 </div><!-- /app-body -->
+<div id="toast" class="toast"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
 <script>
 'use strict';
 
@@ -554,7 +569,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('startDate').value        = today;
   document.getElementById('housePurchaseDate').value = today;
 
-  loadFromStorage();
+  if (!loadFromURL()) loadFromStorage();
 
   if (scenarios.length === 0) {
     editorOpen = true;
@@ -1799,6 +1814,52 @@ function loadFromStorage() {
     const raw = localStorage.getItem('houseSim_v1');
     if (raw) { scenarios = JSON.parse(raw); renderScenarios(); }
   } catch {}
+}
+
+// ── URL export / import ───────────────────────────────────
+function exportToURL() {
+  if (!scenarios.length) { showToast('No saved scenarios to share.'); return; }
+  const payload = JSON.stringify({
+    v: 1,
+    scenarios: scenarios.map(sc => ({
+      id: sc.id, name: sc.name, color: sc.color, visible: sc.visible,
+      inputs: sc.inputs
+    }))
+  });
+  const hash = '#state=' + LZString.compressToEncodedURIComponent(payload);
+  const url  = location.origin + location.pathname + hash;
+  navigator.clipboard.writeText(url)
+    .then(() => showToast('Link copied to clipboard!'))
+    .catch(() => {
+      // Fallback: prompt with the URL if clipboard is denied
+      prompt('Copy this link:', url);
+    });
+}
+
+function loadFromURL() {
+  const hash = location.hash;
+  if (!hash.startsWith('#state=')) return false;
+  try {
+    const json = LZString.decompressFromEncodedURIComponent(hash.slice(7));
+    const data = JSON.parse(json);
+    if (data.v !== 1 || !Array.isArray(data.scenarios)) return false;
+    scenarios = data.scenarios.map(sc => ({ ...sc, data: [] }));
+    // Re-run sim for each scenario to populate .data
+    for (const sc of scenarios) {
+      if (sc.inputs) sc.data = simulateMonths(sc.inputs);
+    }
+    saveToStorage();
+    renderScenarios();
+    history.replaceState(null, '', location.pathname); // clean URL
+    return true;
+  } catch { return false; }
+}
+
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2500);
 }
 
 // ── Formatters ────────────────────────────────────────────
