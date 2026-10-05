@@ -1450,9 +1450,9 @@ function buildTrendView() {
     return {
       label: s.name,
       data: deltas,
-      backgroundColor: deltas.map(d => d >= 0 ? '#22c55e99' : '#ef444488'),
-      borderColor:     deltas.map(d => d >= 0 ? '#16a34a'   : '#dc2626'),
-      borderWidth: 1,
+      backgroundColor: deltas.map(d => d >= 0 ? s.color + 'dd' : s.color + '55'),
+      borderColor:     deltas.map(d => d >= 0 ? s.color      : '#ef4444'),
+      borderWidth: deltas.map(d => d >= 0 ? 1 : 2),
       borderRadius: 3,
     };
   });
