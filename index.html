@@ -238,15 +238,12 @@ body{
         <div class="sec-hdr" onclick="toggleSec(this)">
           <span>Income</span><span class="chevron">▼</span>
         </div>
-        <div class="sec-body">
-          <div class="field">
-            <label>Annual Salary ($)</label>
-            <input type="number" id="incomeSalary" value="150000">
-          </div>
-          <div class="field">
-            <label>Annual Raise (%)</label>
-            <input type="number" id="incomeRaise" value="3" step="0.1">
-          </div>
+        <div class="sec-body" style="overflow-x:auto">
+          <table class="dyn-table" style="min-width:290px">
+            <thead><tr><th>Description</th><th>Annual ($)</th><th>Raise %/yr</th><th></th></tr></thead>
+            <tbody id="incomesBody"></tbody>
+          </table>
+          <button class="add-btn" onclick="addIncomeRow()">+ Add Income</button>
         </div>
       </div>
 
@@ -256,12 +253,12 @@ body{
           <span>Stock Grants (RSUs)</span><span class="chevron">▼</span>
         </div>
         <div class="sec-body" style="overflow-x:auto">
-          <table class="dyn-table" style="min-width:310px">
-            <thead><tr><th>Value ($)</th><th>Grant Date</th><th>Annual?</th><th>Growth %/yr</th><th></th></tr></thead>
+          <table class="dyn-table" style="min-width:420px">
+            <thead><tr><th>Type</th><th>Value ($)</th><th>Date</th><th>Annual?</th><th>Growth %/yr</th><th></th></tr></thead>
             <tbody id="grantsBody"></tbody>
           </table>
           <button class="add-btn" onclick="addGrantRow()">+ Add Grant</button>
-          <p class="hint">Vests in 8 installments (April &amp; October over 4 years). Enable Annual to re-issue a new grant every year on the same date.</p>
+          <p class="hint">4-Year Grant: vests in 8 installments (Apr &amp; Oct). Single Vest: full amount on the exact date. Enable Annual to re-issue every year.</p>
         </div>
       </div>
 
@@ -479,6 +476,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('housePurchaseDate').value = today;
 
   loadFromStorage();
+  addIncomeRow({ desc: 'Salary', amount: 150000, raise: 3 });
   addGrantRow({ amount: 200000, date: today });
   addSpendingRow({ desc: 'General Living', amount: 5000, start: '', end: '' });
 
@@ -558,10 +556,15 @@ function toggleHouseFields() {
 
 // ── Dynamic rows: Grants ──────────────────────────────────
 function addGrantRow(data = {}) {
-  const today = toDateInput(new Date());
+  const today     = toDateInput(new Date());
   const recurring = data.recurring ? 'checked' : '';
-  const tr = document.createElement('tr');
+  const type      = data.type ?? 'grant';
+  const tr        = document.createElement('tr');
   tr.innerHTML = `
+    <td><select style="width:92px" onchange="toggleGrantGrowth(this.closest('tr').querySelector('input[type=checkbox]'))">
+      <option value="grant" ${type === 'grant' ? 'selected' : ''}>4-Year</option>
+      <option value="vest"  ${type === 'vest'  ? 'selected' : ''}>Single Vest</option>
+    </select></td>
     <td><input type="number" value="${data.amount ?? 200000}" placeholder="100000" style="width:80px"></td>
     <td><input type="date"   value="${data.date   ?? today}" style="width:112px"></td>
     <td style="text-align:center"><input type="checkbox" ${recurring} onchange="toggleGrantGrowth(this)"></td>
@@ -572,19 +575,44 @@ function addGrantRow(data = {}) {
 }
 
 function toggleGrantGrowth(cb) {
-  const inp = cb.closest('tr').querySelectorAll('input')[3];
+  const inp = cb.closest('tr').querySelectorAll('input[type=number]')[1];
   inp.disabled = !cb.checked;
   if (!cb.checked) inp.value = '0';
 }
 
 function getGrants() {
   return Array.from(document.querySelectorAll('#grantsBody tr')).map(tr => {
+    const sel    = tr.querySelector('select');
     const inputs = tr.querySelectorAll('input');
     return {
+      type:       sel ? sel.value : 'grant',
       amount:     parseFloat(inputs[0].value) || 0,
       date:       inputs[1].value,
       recurring:  inputs[2].checked,
       growthRate: parseFloat(inputs[3].value) || 0
+    };
+  });
+}
+
+// ── Dynamic rows: Incomes ─────────────────────────────────
+function addIncomeRow(data = {}) {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td><input type="text"   value="${data.desc   ?? ''}"      placeholder="e.g. Salary" style="width:80px"></td>
+    <td><input type="number" value="${data.amount ?? 150000}"  style="width:80px"></td>
+    <td><input type="number" value="${data.raise  ?? 3}" step="0.1" style="width:55px"></td>
+    <td><button class="del-btn" title="Remove" onclick="this.closest('tr').remove()">×</button></td>
+  `;
+  document.getElementById('incomesBody').appendChild(tr);
+}
+
+function getIncomes() {
+  return Array.from(document.querySelectorAll('#incomesBody tr')).map(tr => {
+    const inputs = tr.querySelectorAll('input');
+    return {
+      desc:   inputs[0].value,
+      amount: parseFloat(inputs[1].value) || 0,
+      raise:  parseFloat(inputs[2].value) || 0
     };
   });
 }
@@ -621,8 +649,7 @@ function getInputs() {
     numYears:          parseInt(document.getElementById('numYears').value)          || 30,
     assetsAmount:      parseFloat(document.getElementById('assetsAmount').value)    || 0,
     assetsGrowth:      parseFloat(document.getElementById('assetsGrowth').value)    || 0,
-    incomeSalary:      parseFloat(document.getElementById('incomeSalary').value)    || 0,
-    incomeRaise:       parseFloat(document.getElementById('incomeRaise').value)     || 0,
+    incomes:           getIncomes(),
     grants:            getGrants(),
     houseEnabled:      document.getElementById('houseEnabled').checked,
     housePurchaseDate: document.getElementById('housePurchaseDate').value,
@@ -668,6 +695,11 @@ function scheduleGrant(sched, grantDate, amount) {
   }
 }
 
+function scheduleVest(sched, vestDate, amount) {
+  const key = monthKey(vestDate.getFullYear(), vestDate.getMonth());
+  sched[key] = (sched[key] || 0) + amount;
+}
+
 function computeVestSchedule(grants, simEndDate) {
   const sched = {};
   for (const g of grants) {
@@ -675,18 +707,29 @@ function computeVestSchedule(grants, simEndDate) {
     const firstDate = parseLocalDate(g.date);
     if (!firstDate) continue;
 
-    if (!g.recurring) {
-      scheduleGrant(sched, firstDate, g.amount);
+    if (g.type === 'vest') {
+      // Single-date vest (or recurring annual single vest)
+      if (!g.recurring) {
+        if (firstDate <= simEndDate) scheduleVest(sched, firstDate, g.amount);
+      } else {
+        for (let n = 0; ; n++) {
+          const vestDate = new Date(firstDate.getFullYear() + n, firstDate.getMonth(), firstDate.getDate());
+          if (vestDate > simEndDate) break;
+          const amount = g.amount * Math.pow(1 + (g.growthRate || 0) / 100, n);
+          scheduleVest(sched, vestDate, amount);
+        }
+      }
     } else {
-      for (let n = 0; ; n++) {
-        const grantDate = new Date(
-          firstDate.getFullYear() + n,
-          firstDate.getMonth(),
-          firstDate.getDate()
-        );
-        if (grantDate > simEndDate) break;
-        const amount = g.amount * Math.pow(1 + (g.growthRate || 0) / 100, n);
-        scheduleGrant(sched, grantDate, amount);
+      // 4-year grant: 8 installments in Apr & Oct
+      if (!g.recurring) {
+        scheduleGrant(sched, firstDate, g.amount);
+      } else {
+        for (let n = 0; ; n++) {
+          const grantDate = new Date(firstDate.getFullYear() + n, firstDate.getMonth(), firstDate.getDate());
+          if (grantDate > simEndDate) break;
+          const amount = g.amount * Math.pow(1 + (g.growthRate || 0) / 100, n);
+          scheduleGrant(sched, grantDate, amount);
+        }
       }
     }
   }
@@ -717,8 +760,9 @@ function simulateMonths(inp) {
   let homeVal        = inp.homePrice;
   let housePurchased = false;
   let annualTax      = inp.homePrice * (inp.propertyTax / 100);
-  let currentSalary  = inp.incomeSalary;
-  let lastRaiseYear  = startYear;
+  const incomeStates = (inp.incomes || []).map(inc => ({
+    amount: inc.amount, raise: inc.raise / 100, lastRaiseYear: startYear
+  }));
   let lastTaxYear    = null;
 
   const monthlyGrowth  = Math.pow(1 + inp.assetsGrowth      / 100, 1 / 12) - 1;
@@ -737,10 +781,12 @@ function simulateMonths(inp) {
     const key     = monthKey(year, month);
     const curDate = new Date(year, month, 1);
 
-    // Annual salary raise on Jan 1 of each new calendar year
-    if (year > lastRaiseYear) {
-      currentSalary *= (1 + inp.incomeRaise / 100);
-      lastRaiseYear  = year;
+    // Annual salary raises on Jan 1 of each new calendar year
+    for (const s of incomeStates) {
+      if (year > s.lastRaiseYear) {
+        s.amount       *= (1 + s.raise);
+        s.lastRaiseYear = year;
+      }
     }
 
     // House purchase: deduct down payment once
@@ -761,8 +807,8 @@ function simulateMonths(inp) {
     // Home appreciation (monthly compound)
     if (housePurchased) homeVal *= (1 + monthlyApprec);
 
-    // Monthly income
-    const income = currentSalary / 12;
+    // Monthly income (sum of all income streams)
+    const income = incomeStates.reduce((sum, s) => sum + s.amount, 0) / 12;
 
     // RSU vests
     const vests = vestSched[key] || 0;
@@ -1103,8 +1149,11 @@ function loadScenario(sc) {
   const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val ?? ''; };
   set('assetsAmount',      i.assetsAmount);
   set('assetsGrowth',      i.assetsGrowth);
-  set('incomeSalary',      i.incomeSalary);
-  set('incomeRaise',       i.incomeRaise);
+  document.getElementById('incomesBody').innerHTML = '';
+  const incomes = i.incomes && i.incomes.length
+    ? i.incomes
+    : [{ desc: '', amount: i.incomeSalary || 0, raise: i.incomeRaise || 0 }];
+  incomes.forEach(inc => addIncomeRow(inc));
   set('housePurchaseDate', i.housePurchaseDate);
   set('homePrice',         i.homePrice);
   set('appraisedValue',    i.appraisedValue || '');
