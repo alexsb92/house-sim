@@ -1450,7 +1450,7 @@ function buildTrendView() {
     return {
       label: s.name,
       data: deltas,
-      backgroundColor: s.color + 'cc',
+      backgroundColor: s.color + 'ee',
       borderColor: s.color,
       borderWidth: 1,
       borderRadius: 3,
@@ -1492,8 +1492,16 @@ function buildTrendView() {
         const bottom = scales.y.bottom;
         if (bottom <= y0) return;
         ctx.save();
-        ctx.fillStyle = 'rgba(239,68,68,0.08)';
+        ctx.fillStyle = 'rgba(239,68,68,0.05)';
         ctx.fillRect(scales.x.left, y0, scales.x.right - scales.x.left, bottom - y0);
+        // zero line
+        ctx.strokeStyle = 'rgba(239,68,68,0.4)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 3]);
+        ctx.beginPath();
+        ctx.moveTo(scales.x.left, y0);
+        ctx.lineTo(scales.x.right, y0);
+        ctx.stroke();
         ctx.restore();
       }
     }, {
