@@ -113,6 +113,15 @@ body{
 .btn-ghost{background:#f1f5f9;color:#475569;border:1px solid #e2e8f0}
 .btn-ghost:hover{background:#e2e8f0;color:#1e293b}
 
+/* Sidebar idle (no editor open) */
+.sidebar-idle{
+  flex:1;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  gap:14px;padding:24px;
+}
+.sidebar-idle p{font-size:11px;color:#94a3b8;text-align:center;line-height:1.5}
+.sidebar-idle .btn{font-size:13px;padding:9px 20px}
+
 /* ── Main area ───────────────────────────────────────── */
 .main{flex:1;display:flex;flex-direction:column;min-width:0;padding:14px;gap:10px;overflow:hidden}
 
@@ -241,7 +250,7 @@ body{
 
   <!-- ══ SIDEBAR ══════════════════════════════════════════ -->
   <div class="sidebar">
-    <div class="sidebar-scroll">
+    <div class="sidebar-scroll" id="sidebarScroll">
 
       <!-- Assets -->
       <div class="section">
@@ -376,7 +385,12 @@ body{
 
     </div><!-- /sidebar-scroll -->
 
-    <div class="actions">
+    <div class="sidebar-idle" id="sidebarIdle" style="display:none">
+      <button class="btn btn-primary" onclick="startNewScenario()">+ New Scenario</button>
+      <p>Click a scenario name below<br>to load and edit it.</p>
+    </div>
+
+    <div class="actions" id="sidebarActions">
       <button class="btn btn-primary" onclick="runSimulation()">Calculate</button>
       <button class="btn btn-success" id="btnSave"     onclick="saveScenario()">Save Scenario</button>
       <button class="btn btn-ghost"   id="btnStopEdit" onclick="clearActiveScenario()" style="display:none">Stop Editing</button>
@@ -467,9 +481,11 @@ body{
     <div class="sc-card">
       <div class="sc-head">
         <span class="panel-title">Saved Scenarios</span>
+        <button class="vtb" onclick="startNewScenario()"
+                style="border:1px solid #e2e8f0;border-radius:6px;padding:3px 10px">+ New</button>
       </div>
       <div class="sc-list" id="scenariosList">
-        <span class="empty-hint">No scenarios saved yet — configure inputs and click "Save Scenario".</span>
+        <span class="empty-hint">No scenarios saved yet — click "+ New Scenario" to get started.</span>
       </div>
     </div>
 
@@ -501,6 +517,7 @@ let mortgageChart      = null;
 const mortgageLines    = { balance: true, principal: true, interest: true };
 let tableEventsOn      = false;
 let tableExpandedRows  = new Set();
+let editorOpen         = false;
 
 // ── Init ──────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -509,12 +526,18 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('housePurchaseDate').value = today;
 
   loadFromStorage();
-  addIncomeRow({ desc: 'Salary', amount: 150000, raise: 3 });
-  addGrantRow({ amount: 200000, date: today });
-  addSpendingRow({ desc: 'General Living', amount: 5000, start: '', end: '' });
 
+  if (scenarios.length === 0) {
+    editorOpen = true;
+    addIncomeRow({ desc: 'Salary', amount: 150000, raise: 3 });
+    addGrantRow({ amount: 200000, date: today });
+    addSpendingRow({ desc: 'General Living', amount: 5000, start: '', end: '' });
+  }
+
+  updateEditorVisibility();
   initChart();
-  runSimulation();
+  if (editorOpen) runSimulation();
+  else { updateChart(); updateDelta(); }
 });
 
 // ── Date helpers ──────────────────────────────────────────
@@ -1033,7 +1056,7 @@ function updateMortgageChart() {
   const len = simResult.withHouse.length;
 
   const sources = [];
-  if (activeScenarioId === null)
+  if (activeScenarioId === null && editorOpen)
     sources.push({ name: 'New Scenario', data: simResult.withHouse, color: '#3b82f6' });
   for (const sc of scenarios) {
     if (!sc.visible) continue;
@@ -1088,7 +1111,7 @@ function updateChart() {
   );
 
   const ds = [];
-  if (activeScenarioId === null)
+  if (activeScenarioId === null && editorOpen)
     ds.push(makeLine('New Scenario', simResult.withHouse, '#3b82f6', false));
 
   const len = simResult.withHouse.length;
@@ -1112,7 +1135,7 @@ function getAllLines() {
   if (!simResult) return lines;
   const inp = simResult.inp;
 
-  if (activeScenarioId === null)
+  if (activeScenarioId === null && editorOpen)
     lines.push({ name: 'New Scenario', data: simResult.withHouse, color: '#3b82f6' });
 
   for (const sc of scenarios) {
@@ -1156,10 +1179,27 @@ function updateDelta() {
 }
 
 // ── Scenarios ─────────────────────────────────────────────
-function clearActiveScenario() {
+function updateEditorVisibility() {
+  document.getElementById('sidebarScroll').style.display = editorOpen ? '' : 'none';
+  document.getElementById('sidebarActions').style.display = editorOpen ? '' : 'none';
+  document.getElementById('sidebarIdle').style.display    = editorOpen ? 'none' : '';
+}
+
+function startNewScenario() {
   activeScenarioId = null;
+  editorOpen = true;
   document.getElementById('btnSave').textContent       = 'Save Scenario';
   document.getElementById('btnStopEdit').style.display = 'none';
+  updateEditorVisibility();
+  runSimulation();
+}
+
+function clearActiveScenario() {
+  activeScenarioId = null;
+  editorOpen = false;
+  document.getElementById('btnSave').textContent       = 'Save Scenario';
+  document.getElementById('btnStopEdit').style.display = 'none';
+  updateEditorVisibility();
   updateChart();
   updateDelta();
 }
@@ -1240,8 +1280,10 @@ function loadScenario(sc) {
   document.getElementById('spendingBody').innerHTML = '';
   (i.spending || []).forEach(s => addSpendingRow(s));
   activeScenarioId = sc.id;
+  editorOpen = true;
   document.getElementById('btnSave').textContent       = 'Save as New';
   document.getElementById('btnStopEdit').style.display = '';
+  updateEditorVisibility();
   updateCashToClose();
   runSimulation();
 }
@@ -1249,13 +1291,16 @@ function loadScenario(sc) {
 function clearAll() {
   if (!confirm('Delete all saved scenarios?')) return;
   scenarios = [];
+  activeScenarioId = null;
+  editorOpen = true;
+  updateEditorVisibility();
   saveToStorage(); renderScenarios(); updateChart(); updateDelta();
 }
 
 function renderScenarios() {
   const el = document.getElementById('scenariosList');
   if (!scenarios.length) {
-    el.innerHTML = '<span class="empty-hint">No scenarios saved yet — configure inputs and click "Save Scenario".</span>';
+    el.innerHTML = '<span class="empty-hint">No scenarios saved yet — click "+ New Scenario" to get started.</span>';
     if (mainView === 'table') buildTable();
     return;
   }
@@ -1314,9 +1359,9 @@ function buildTable() {
     return;
   }
 
-  // Gather sources: new-scenario sim (only when not editing) + visible saved scenarios
+  // Gather sources: new-scenario sim (only when actively creating) + visible saved scenarios
   const sources = [];
-  if (activeScenarioId === null)
+  if (activeScenarioId === null && editorOpen)
     sources.push({ name: 'New Scenario', data: simResult.withHouse, color: '#3b82f6' });
   for (const sc of scenarios) {
     if (!sc.visible) continue;
