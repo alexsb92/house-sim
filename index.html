@@ -1271,6 +1271,7 @@ function toggleScenario(id) {
   const sc = scenarios.find(s => s.id === id);
   if (sc) sc.visible = !sc.visible;
   saveToStorage(); renderScenarios(); updateChart(); updateDelta();
+  if (mainView === 'trend') buildTrendView();
 }
 
 function duplicateScenario(id) {
