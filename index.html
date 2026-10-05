@@ -1034,7 +1034,7 @@ function updateMortgageChart() {
 
   const sources = [];
   if (activeScenarioId === null)
-    sources.push({ name: 'Current', data: simResult.withHouse, color: '#3b82f6' });
+    sources.push({ name: 'New Scenario', data: simResult.withHouse, color: '#3b82f6' });
   for (const sc of scenarios) {
     if (!sc.visible) continue;
     sources.push({ name: sc.name, data: sc.data.slice(0, len), color: sc.color });
@@ -1089,7 +1089,7 @@ function updateChart() {
 
   const ds = [];
   if (activeScenarioId === null)
-    ds.push(makeLine('Current', simResult.withHouse, '#3b82f6', false));
+    ds.push(makeLine('New Scenario', simResult.withHouse, '#3b82f6', false));
 
   const len = simResult.withHouse.length;
   for (const sc of scenarios) {
@@ -1113,7 +1113,7 @@ function getAllLines() {
   const inp = simResult.inp;
 
   if (activeScenarioId === null)
-    lines.push({ name: 'Current', data: simResult.withHouse, color: '#3b82f6' });
+    lines.push({ name: 'New Scenario', data: simResult.withHouse, color: '#3b82f6' });
 
   for (const sc of scenarios) {
     if (!sc.visible) continue;
@@ -1314,9 +1314,10 @@ function buildTable() {
     return;
   }
 
-  // Gather sources: current sim + visible saved scenarios
+  // Gather sources: new-scenario sim (only when not editing) + visible saved scenarios
   const sources = [];
-  sources.push({ name: 'Current', data: simResult.withHouse, color: '#3b82f6' });
+  if (activeScenarioId === null)
+    sources.push({ name: 'New Scenario', data: simResult.withHouse, color: '#3b82f6' });
   for (const sc of scenarios) {
     if (!sc.visible) continue;
     sources.push({ name: sc.name, data: sc.data, color: sc.color });
