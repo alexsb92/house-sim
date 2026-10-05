@@ -373,7 +373,7 @@ body{
         <div class="sec-body" style="overflow-x:auto">
           <table class="dyn-table" style="min-width:310px">
             <thead>
-              <tr><th>Description</th><th>$/mo</th><th>Start</th><th>End</th><th></th></tr>
+              <tr><th>Description</th><th>$/mo</th><th>%/yr</th><th>Start</th><th>End</th><th></th></tr>
             </thead>
             <tbody id="spendingBody"></tbody>
           </table>
@@ -677,6 +677,7 @@ function addSpendingRow(data = {}) {
   tr.innerHTML = `
     <td><input type="text"   value="${data.desc   ?? ''}"    placeholder="e.g. Rent"  style="width:80px"></td>
     <td><input type="number" value="${data.amount ?? 2000}"  placeholder="0"           style="width:65px"></td>
+    <td><input type="number" value="${data.raise  ?? 0}"     placeholder="0" step="0.1" style="width:52px"></td>
     <td><input type="date"   value="${data.start  ?? ''}"                               style="width:112px"></td>
     <td><input type="date"   value="${data.end    ?? ''}"                               style="width:112px"></td>
     <td><button class="del-btn" title="Remove" onclick="this.closest('tr').remove()">×</button></td>
@@ -686,10 +687,11 @@ function addSpendingRow(data = {}) {
 
 function getSpending() {
   return Array.from(document.querySelectorAll('#spendingBody tr')).map(tr => {
-    const [desc, amt, start, end] = tr.querySelectorAll('input');
+    const [desc, amt, raise, start, end] = tr.querySelectorAll('input');
     return {
       desc:   desc.value,
       amount: parseFloat(amt.value) || 0,
+      raise:  parseFloat(raise.value) || 0,
       start:  start.value,
       end:    end.value
     };
@@ -814,8 +816,12 @@ function simulateMonths(inp) {
   let homeVal        = inp.homePrice;
   let housePurchased = false;
   let annualTax      = inp.homePrice * (inp.propertyTax / 100);
-  const incomeStates = (inp.incomes || []).map(inc => ({
+  const incomeStates  = (inp.incomes || []).map(inc => ({
     amount: inc.amount, raise: inc.raise / 100, lastRaiseYear: startYear
+  }));
+  const spendingStates = (inp.spending || []).map(s => ({
+    amount: s.amount, raise: (s.raise || 0) / 100, lastRaiseYear: startYear,
+    start: s.start, end: s.end, desc: s.desc
   }));
   let lastTaxYear    = null;
 
@@ -835,9 +841,15 @@ function simulateMonths(inp) {
     const key     = monthKey(year, month);
     const curDate = new Date(year, month, 1);
 
-    // Annual salary raises on Jan 1 of each new calendar year
+    // Annual raises on Jan 1 of each new calendar year
     for (const s of incomeStates) {
       if (year > s.lastRaiseYear) {
+        s.amount       *= (1 + s.raise);
+        s.lastRaiseYear = year;
+      }
+    }
+    for (const s of spendingStates) {
+      if (s.raise > 0 && year > s.lastRaiseYear) {
         s.amount       *= (1 + s.raise);
         s.lastRaiseYear = year;
       }
@@ -860,13 +872,13 @@ function simulateMonths(inp) {
     }
 
     // Spending boundary events
-    for (const s of inp.spending) {
+    for (const s of spendingStates) {
       if (!s.amount) continue;
       const sStart = s.start ? parseLocalDate(s.start) : null;
       const sEnd   = s.end   ? parseLocalDate(s.end)   : null;
       const nm     = s.desc || 'Spending';
       if (sStart && sStart.getFullYear() === year && sStart.getMonth() === month)
-        events.push({ type: 'spend', label: `${nm} started`, detail: `${fmt$(s.amount)}/mo` });
+        events.push({ type: 'spend', label: `${nm} started`, detail: `${fmt$(s.amount)}/mo${s.raise > 0 ? ` +${(s.raise*100).toFixed(1)}%/yr` : ''}` });
       if (sEnd && sEnd.getFullYear() === year && sEnd.getMonth() === month)
         events.push({ type: 'spend', label: `${nm} ended`, detail: `was ${fmt$(s.amount)}/mo` });
     }
@@ -898,9 +910,9 @@ function simulateMonths(inp) {
     const vests = vestSched[key] || 0;
     if (vests > 0) events.push({ type: 'rsu', label: 'RSU vest', detail: fmt$(vests) });
 
-    // General spending (active items only)
+    // General spending (active items only, with annual growth)
     let spending = 0;
-    for (const s of inp.spending) {
+    for (const s of spendingStates) {
       if (s.amount <= 0) continue;
       const sStart = s.start ? parseLocalDate(s.start) : null;
       const sEnd   = s.end   ? parseLocalDate(s.end)   : null;
