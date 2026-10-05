@@ -216,6 +216,7 @@ body{
 .ev-house{background:#fef3c7;color:#d97706}
 .ev-grant{background:#ede9fe;color:#7c3aed}
 .ev-spend{background:#fee2e2;color:#dc2626}
+.ev-src-badge{display:inline-block;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:600;color:#fff;margin-left:5px;opacity:.85}
 @media(prefers-color-scheme:dark){
   .data-table tr.has-events td:first-child{color:#60a5fa}
   .data-table tr.has-events:hover td{background:#1e3a5f}
@@ -1364,7 +1365,7 @@ function buildTable() {
       const rowKey = pt0 ? pt0.date : String(i);
       const label  = pt0 ? labelFromKey(pt0.date) : '';
 
-      const evts = collectEvents(sources.map(s => s.data[i]));
+      const evts = collectEvents(sources.map(s => ({ name: s.name, color: s.color, pt: s.data[i] })));
       const hasEvt = tableEventsOn && evts.length > 0;
       const isExp  = hasEvt && tableExpandedRows.has(rowKey);
       const arrow  = hasEvt ? `<span class="tbl-expand" style="transform:rotate(${isExp?90:0}deg)">▶</span>` : '';
@@ -1379,14 +1380,15 @@ function buildTable() {
         }
       }
       rows += '</tr>';
-      if (isExp) rows += buildEventSubRow(evts, colCount);
+      if (isExp) rows += buildEventSubRow(evts, colCount, sources.length);
     }
   } else {
     const yearGroups = buildYearGroups(sources);
     for (const yr of yearGroups) {
       const rowKey = yr.label;
       const evts   = collectEvents(
-        sources.flatMap(s => s.data.filter(d => d.date.startsWith(yr.label))),
+        sources.flatMap(s => s.data.filter(d => d.date.startsWith(yr.label))
+                                   .map(pt => ({ name: s.name, color: s.color, pt }))),
         true
       );
       const hasEvt = tableEventsOn && evts.length > 0;
@@ -1403,7 +1405,7 @@ function buildTable() {
         }
       }
       rows += '</tr>';
-      if (isExp) rows += buildEventSubRow(evts, colCount);
+      if (isExp) rows += buildEventSubRow(evts, colCount, sources.length);
     }
   }
 
@@ -1422,20 +1424,22 @@ function toggleTableRow(key) {
   buildTable();
 }
 
-function collectEvents(points, addMonth = false) {
-  const out = [], seen = new Set();
-  for (const pt of points) {
+function collectEvents(sourcedPoints, addMonth = false) {
+  const evMap = new Map();
+  for (const { name, color, pt } of sourcedPoints) {
     if (!pt || !pt.events) continue;
     const prefix = addMonth ? labelFromKey(pt.date) + ': ' : '';
     for (const ev of pt.events) {
       const k = `${ev.type}|${prefix}${ev.label}|${ev.detail}`;
-      if (!seen.has(k)) { seen.add(k); out.push({ ...ev, label: prefix + ev.label }); }
+      if (!evMap.has(k)) evMap.set(k, { type: ev.type, label: prefix + ev.label, detail: ev.detail, sources: [] });
+      const entry = evMap.get(k);
+      if (!entry.sources.find(s => s.name === name)) entry.sources.push({ name, color });
     }
   }
-  return out;
+  return Array.from(evMap.values());
 }
 
-function buildEventSubRow(evts, colCount) {
+function buildEventSubRow(evts, colCount, totalSources) {
   const typeOrder = [], byType = {};
   for (const ev of evts) {
     if (!byType[ev.type]) { byType[ev.type] = []; typeOrder.push(ev.type); }
@@ -1445,9 +1449,14 @@ function buildEventSubRow(evts, colCount) {
   const typeColors = { rsu: '#059669', house: '#d97706', grant: '#7c3aed', spend: '#dc2626' };
   let inner = '';
   for (const type of typeOrder) {
-    const chips = byType[type].map(ev =>
-      `<span class="ev-chip ev-${type}">${ev.label} — ${ev.detail}</span>`
-    ).join('');
+    const chips = byType[type].map(ev => {
+      const badges = ev.sources.length < totalSources
+        ? ev.sources.map(s =>
+            `<span class="ev-src-badge" style="background:${s.color}">${s.name}</span>`
+          ).join('')
+        : '';
+      return `<span class="ev-chip ev-${type}">${ev.label} — ${ev.detail}${badges}</span>`;
+    }).join('');
     inner += `<div class="ev-type-row">
       <span class="ev-type-lbl" style="color:${typeColors[type]}">${typeLabels[type]}</span>${chips}
     </div>`;
